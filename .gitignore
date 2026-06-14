@@ -2,9 +2,16 @@
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Environment
 .env
-*.crt
-*.key
+venv/
+.venv/
 
 # Node
 node_modules/
@@ -18,6 +25,29 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# Generated certificates (no longer needed without Word)
+# Generated / temp
 *.crt
 *.key
+*.log
+*.tmp
+.temp/
+
+# Bundled data files from external sources
+backend/data/
+
+# Cloned reference repos (sources, not active code)
+paraphrase-doctor/
+paper-revision-editor/
+humanizer-main/
+humanizer-Noora/
+proof-reading-skill/
+Paraphrasing sources/
+machine_readable_wordlists/
+
+
+# But keep the data repos needed at runtime
+# wordlist-medicalterms-en/   -- needed for medical_vocab.py
+# english-words/              -- needed for english_words_loader.py
+
+# ML model cache
+~/.cache/huggingface/

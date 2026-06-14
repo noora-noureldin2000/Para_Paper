@@ -677,6 +677,96 @@ body {
   color: #fff;
 }
 
+/* Strength slider control */
+.strength-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.strength-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.strength-value {
+  font-weight: 600;
+  color: var(--primary-hover);
+  font-size: 11px;
+}
+
+.strength-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.strength-tag {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.strength-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 4px;
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.strength-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.strength-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+}
+
+.strength-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+/* Category badge styles for proofreading */
+.category-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+.category-badge.structural { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.category-badge.argumentation { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
+.category-badge.paragraph { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.category-badge.readerexperience { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+.category-badge.copyediting { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.category-badge.aitells { background: rgba(236, 72, 153, 0.2); color: #f472b6; }
+.category-badge.general { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+
 /* Helper utilities */
 .hidden {
   display: none !important;

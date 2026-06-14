@@ -1,0 +1,267 @@
+import os
+
+MEDICAL_WORDLIST_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "wordlist-medicalterms-en", "wordlist.txt")
+
+_medical_terms: set = None
+_medical_lower: set = None
+
+
+def load_medical_terms() -> set:
+    global _medical_terms, _medical_lower
+    if _medical_terms is not None:
+        return _medical_terms
+    _medical_terms = set()
+    _medical_lower = set()
+    if not os.path.exists(MEDICAL_WORDLIST_PATH):
+        print(f"[MedicalVocab] Medical wordlist not found at {MEDICAL_WORDLIST_PATH}")
+        return _medical_terms
+    with open(MEDICAL_WORDLIST_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            term = line.strip()
+            if term:
+                _medical_terms.add(term)
+                _medical_lower.add(term.lower())
+    print(f"[MedicalVocab] Loaded {len(_medical_terms)} medical terms")
+    return _medical_terms
+
+
+def is_medical_term(word: str) -> bool:
+    terms = load_medical_terms()
+    return word in terms or word.lower() in _medical_lower
+
+
+def find_medical_terms(text: str) -> list:
+    load_medical_terms()
+    found = []
+    words = text.split()
+    for w in words:
+        clean = w.strip(".,;:!?()[]{}'\"")
+        if clean and (clean in _medical_terms or clean.lower() in _medical_lower):
+            found.append(clean)
+    return found
+
+
+def get_medical_context_hint(terms: list) -> str:
+    if not terms:
+        return ""
+    return "The text contains medical terminology. Preserve clinical accuracy."
+
+
+MEDICAL_SYNONYMS = {
+    "patient": "subject",
+    "drug": "pharmaceutical agent",
+    "treatment": "therapeutic intervention",
+    "disease": "pathological condition",
+    "symptom": "clinical manifestation",
+    "diagnosis": "diagnostic assessment",
+    "therapy": "treatment regimen",
+    "surgery": "surgical intervention",
+    "medicine": "medication",
+    "pain": "discomfort",
+    "infection": "infectious process",
+    "inflammation": "inflammatory response",
+    "cell": "cellular entity",
+    "tissue": "biological tissue",
+    "organ": "organic structure",
+    "blood": "circulatory fluid",
+    "heart": "cardiac organ",
+    "brain": "cerebral tissue",
+    "lung": "pulmonary organ",
+    "liver": "hepatic organ",
+    "kidney": "renal organ",
+    "bone": "osseous tissue",
+    "muscle": "muscular tissue",
+    "nerve": "neural fiber",
+    "skin": "dermal layer",
+    "cancer": "malignancy",
+    "tumor": "neoplasm",
+    "virus": "viral pathogen",
+    "bacteria": "bacterial microorganisms",
+    "protein": "proteomic molecule",
+    "gene": "genetic sequence",
+    "enzyme": "enzymatic catalyst",
+    "hormone": "endocrine signaling molecule",
+    "antibody": "immunoglobulin",
+    "vaccine": "immunization agent",
+    "dose": "dosage",
+    "study": "clinical investigation",
+    "trial": "clinical trial",
+    "result": "clinical outcome",
+    "effect": "therapeutic effect",
+    "risk": "risk factor",
+    "cause": "etiological factor",
+    "prevention": "prophylactic measure",
+    "screening": "diagnostic screening",
+    "monitoring": "clinical surveillance",
+    "acute": "acute-onset",
+    "chronic": "long-standing",
+    "severe": "severe-grade",
+    "mild": "low-grade",
+    "moderate": "moderate-grade",
+    "normal": "within normal limits",
+    "abnormal": "pathological",
+    "positive": "positive finding",
+    "negative": "negative finding",
+    "increase": "elevation",
+    "decrease": "reduction",
+    "improve": "ameliorate",
+    "worsen": "deteriorate",
+    "develop": "manifest",
+    "occur": "present",
+    "show": "demonstrate",
+    "suggest": "indicate",
+    "associated": "correlated",
+    "significant": "statistically significant",
+    "common": "prevalent",
+    "rare": "infrequent",
+    "frequent": "high-frequency",
+    "typical": "characteristic",
+    "standard": "conventional",
+    "novel": "investigational",
+    "current": "prevailing",
+    "previous": "prior",
+    "early": "initial",
+    "late": "advanced-stage",
+    "primary": "first-line",
+    "secondary": "second-line",
+    "initial": "baseline",
+    "follow-up": "subsequent",
+    "baseline": "reference",
+    "outcome": "endpoint",
+    "response": "therapeutic response",
+    "survival": "survival rate",
+    "mortality": "mortality rate",
+    "morbidity": "morbidity rate",
+    "prevalence": "disease prevalence",
+    "incidence": "disease incidence",
+    "population": "patient population",
+    "sample": "study sample",
+    "cohort": "patient cohort",
+    "group": "study group",
+    "control": "control group",
+    "intervention": "therapeutic intervention",
+    "placebo": "placebo control",
+}
+
+MEDICAL_ACADEMIC_PHRASES = {
+    "shows": "demonstrates",
+    "showed": "demonstrated",
+    "showing": "demonstrating",
+    "found": "identified",
+    "find": "identify",
+    "finding": "identification",
+    "findings": "findings",
+    "used": "employed",
+    "use": "employ",
+    "using": "employing",
+    "important": "clinically relevant",
+    "very": "considerably",
+    "good": "favorable",
+    "bad": "unfavorable",
+    "big": "substantial",
+    "small": "modest",
+    "many": "numerous",
+    "much": "substantial",
+    "some": "certain",
+    "few": "limited",
+    "often": "frequently",
+    "always": "consistently",
+    "never": "in no instance",
+    "maybe": "potentially",
+    "change": "alteration",
+    "changes": "alterations",
+    "changed": "altered",
+    "help": "facilitate",
+    "helps": "facilitates",
+    "helped": "facilitated",
+    "make": "induce",
+    "makes": "induces",
+    "made": "induced",
+    "get": "obtain",
+    "gets": "obtains",
+    "got": "obtained",
+    "need": "require",
+    "needs": "requires",
+    "needed": "required",
+    "try": "attempt",
+    "tries": "attempts",
+    "tried": "attempted",
+    "look": "examine",
+    "looks": "examines",
+    "looked": "examined",
+    "check": "verify",
+    "checked": "verified",
+    "checking": "verifying",
+    "think": "postulate",
+    "thinks": "postulates",
+    "thought": "postulated",
+    "know": "ascertain",
+    "known": "established",
+    "about": "approximately",
+    "around": "approximately",
+    "like": "such as",
+    "especially": "particularly",
+    "mostly": "predominantly",
+    "mainly": "primarily",
+    "also": "additionally",
+    "too": "as well",
+    "very": "notably",
+    "really": "indeed",
+    "actually": "in fact",
+    "basically": "fundamentally",
+    "usually": "generally",
+    "normally": "typically",
+    "commonly": "frequently",
+    "rarely": "infrequently",
+    "sometimes": "occasionally",
+    "soon": "in the near term",
+    "then": "subsequently",
+    "now": "currently",
+    "before": "prior to",
+    "after": "following",
+    "during": "throughout",
+    "while": "concurrent with",
+    "because": "due to",
+    "so": "thus",
+    "if": "whether",
+    "but": "although",
+    "however": "nevertheless",
+    "therefore": "consequently",
+    "thus": "hence",
+    "also": "furthermore",
+    "too": "in addition",
+    "still": "nonetheless",
+    "yet": "however",
+    "already": "previously established",
+    "just": "merely",
+    "only": "exclusively",
+    "even": "including",
+    "really": "substantially",
+    "quite": "relatively",
+    "pretty": "fairly",
+    "rather": "somewhat",
+    "somewhat": "to some extent",
+    "that": "which",
+    "thing": "factor",
+    "things": "factors",
+    "way": "method",
+    "ways": "methods",
+    "part": "component",
+    "parts": "components",
+    "kind": "type",
+    "kinds": "types",
+    "type": "category",
+    "types": "categories",
+    "example": "instance",
+    "examples": "instances",
+    "reason": "rationale",
+    "reasons": "rationales",
+    "result": "outcome",
+    "results": "outcomes",
+    "difference": "discrepancy",
+    "differences": "discrepancies",
+    "effect": "impact",
+    "effects": "impacts",
+    "problem": "issue",
+    "problems": "issues",
+}

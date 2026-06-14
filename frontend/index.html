@@ -58,6 +58,38 @@
       <div class="tab-content" id="tab-paraphrase">
         <div class="controls-group">
           <p class="tab-description">Rewrite text into Academic, Concise, or High-Impact variations.</p>
+          
+          <div class="radio-selector" style="margin-bottom: 12px;">
+            <label class="radio-label">
+              <input type="radio" name="paraphraseMode" value="general" checked>
+              <span class="radio-custom"></span>
+              <div class="radio-text">
+                <span class="radio-title">General Academic</span>
+                <span class="radio-desc">Standard academic paraphrasing for any content</span>
+              </div>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="paraphraseMode" value="medical">
+              <span class="radio-custom"></span>
+              <div class="radio-text">
+                <span class="radio-title">Medical / Clinical</span>
+                <span class="radio-desc">Preserves clinical terminology, drug names, dosages & citations</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="strength-control">
+            <label class="strength-label">
+              <span>Transformation Strength</span>
+              <span class="strength-value" id="paraphraseStrengthValue">3 - Moderate</span>
+            </label>
+            <div class="strength-slider-row">
+              <span class="strength-tag">Light</span>
+              <input type="range" id="paraphraseStrength" class="strength-slider" min="1" max="5" value="3" step="1">
+              <span class="strength-tag">Maximum</span>
+            </div>
+          </div>
+
           <button class="btn-primary" id="btnRunParaphrase">
             <span>Paraphrase Text</span>
           </button>

@@ -25,6 +25,7 @@ app.add_middleware(
 # Request Models
 class TextPayload(BaseModel):
     text: str
+    strength: int = 3
 
 class HumanizePayload(BaseModel):
     text: str
@@ -35,8 +36,13 @@ class ProofreadPayload(BaseModel):
     phase: str = "detection"  # "detection" or "fix"
     approved_ids: Optional[List[int]] = None
 
+class MedicalParaphrasePayload(BaseModel):
+    text: str
+    strength: int = 3
+
 # Initialize Agents
 paraphrase_agent = AntigravityAgent("academic_rewording.md")
+paraphrase_medical_agent = AntigravityAgent("academic_rewording_medical.md")
 humanizer_noora_agent = AntigravityAgent("humanizer_noora.md")
 humanizer_general_agent = AntigravityAgent("humanizer_general.md")
 proofread_agent = AntigravityAgent("proofreading.md")
@@ -48,11 +54,23 @@ async def handle_paraphrase(payload: TextPayload):
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
             
-        print(f"[API] Paraphrase request received. Text length: {len(payload.text)}")
-        result = await paraphrase_agent.run(payload.text)
+        print(f"[API] Paraphrase request received. Text length: {len(payload.text)}, strength: {payload.strength}")
+        result = await paraphrase_agent.run(payload.text, strength=payload.strength)
         return result
     except Exception as e:
         print(f"[API] Paraphrase error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/paraphrase/medical")
+async def handle_medical_paraphrase(payload: MedicalParaphrasePayload):
+    try:
+        if not payload.text.strip():
+            raise HTTPException(status_code=400, detail="Empty text selection")
+        print(f"[API] Medical Paraphrase request received. Text length: {len(payload.text)}, strength: {payload.strength}")
+        result = await paraphrase_medical_agent.run(payload.text, strength=payload.strength)
+        return result
+    except Exception as e:
+        print(f"[API] Medical Paraphrase error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/humanize")

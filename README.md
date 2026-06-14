@@ -1,115 +1,117 @@
 # AI Writing Assistant
 
-An AI-powered writing tool for **paraphrasing**, **humanizing** (anti-AI detection cleanup), and **proofreading** academic and clinical manuscripts. Runs locally on your machine — no internet required after setup.
+An AI-powered writing assistant that provides **paraphrasing**, **humanizing** (anti-AI detection cleanup), and **proofreading** of academic and clinical manuscripts. Runs fully offline using a local rules-based engine — no API key required.
 
 ## Features
 
-| Feature | Description |
-|---|---|
-| **Paraphrase** | Rewrites text in Academic, Concise, or High-Impact styles |
-| **Humanize** | Removes AI-detection patterns (Dr. Noora clinical style or General anti-AI cleanup) |
-| **Proofread** | Two-phase audit: detects issues, then applies fixes |
+- **Paraphrase** — Rewrites text in Academic, Concise, or High-Impact styles with adjustable strength (1–5)
+- **Medical Paraphrase** — Clinically-aware rewrites that preserve drug names, dosages, citations, and numerical accuracy
+- **Humanize** — Removes AI writing patterns (Dr. Noora clinical style or General anti-AI cleanup)
+- **Proofread** — Two-phase audit: Phase 1 detects issues (6 categories); Phase 2 applies fixes
+- **Academic Vocabulary Scoring** — Measures vocabulary density against the COCA Academic Vocabulary List (3,000 lemmas)
 
-## Quick Start (Windows)
+## Quick Start
 
-### 1. Install Python
+### Prerequisites
+- Python 3.10+
+- Windows, macOS, or Linux
 
-Make sure you have **Python 3.10 or later** installed.
-Check by opening a terminal (Command Prompt or PowerShell) and running:
+### Setup
+```bash
+# Clone with submodules
+git clone --recurse-submodules https://github.com/YOUR_USER/Para_Paper.git
+cd Para_Paper
 
-```
-python --version
-```
-
-If not installed, download from [python.org](https://www.python.org/downloads/) and check **"Add Python to PATH"** during installation.
-
-### 2. Run the setup script
-
-Open PowerShell or Command Prompt and run:
-
-```powershell
-cd D:\GitHub\Para_Paper\backend
-python main.py
-```
-
-The first time you run it, you may need to install dependencies. If you see import errors, run:
-
-```powershell
+# Install Python dependencies
+cd backend
 pip install -r requirements.txt
 ```
 
-Then try `python main.py` again.
-
-### 3. Open in your browser
-
-Once you see:
-
-```
-=======================================================
-  AI Writing Assistant Backend
-=======================================================
-  Server:  http://localhost:8765
-  Open in your browser to start
-=======================================================
+### Run
+```bash
+cd backend
+python main.py
 ```
 
-Open **http://localhost:8765** in your browser (Chrome, Edge, or Firefox).
+Open **http://localhost:8765** in your browser.
 
-### 4. Use the tool
+## Lexical Resources
 
-1. **Paste or type** your text in the text box at the top
-2. Click a tab: **Paraphrase**, **Humanize**, or **Proofread**
-3. Click the action button (e.g. "Paraphrase Text")
-4. Click **"Copy to Clipboard"** on any result to copy it
+The tool bundles four lexical datasets for high-quality academic and medical text processing:
 
----
+| Resource | Source | Entries | Used By |
+|---|---|---|---|
+| **Medical Terms** | [wordlist-medicalterms-en](https://github.com/glutanimate/wordlist-medicalterms-en) | 98,119 | Medical term detection, clinical paraphrasing |
+| **English Dictionary** | [english-words](https://github.com/dwyl/english-words) | 479,000 | Lexical validation in rewrites |
+| **Academic Vocabulary (AVL)** | [COCA Academic Vocabulary List](https://www.academicvocabulary.info/) | 3,000 lemmas | Academic density scoring, style analysis |
+| **Medical Academic Wordlist (MAWL)** | [machine_readable_wordlists](https://github.com/lpmi-13/machine_readable_wordlists) | 623 words | Medical-academic vocabulary detection |
 
-## How each feature works
+Medical content is auto-detected when ≥10% of text vocabulary matches the medical term list (excluding common English words). When detected, the system routes through the clinical paraphrasing pipeline automatically.
 
-### Paraphrase
-Paste text and click "Paraphrase Text". You get three versions:
-- **Academic / Formal** — scholarly vocabulary, passive constructions
-- **Concise / Direct** — short, to-the-point
-- **High-Impact / Active** — bold claims, active voice
-
-### Humanize
-Two modes:
-- **Dr. Noora Style** — clinical vocabulary, bracket spacing quirks, citation patterns
-- **General Anti-AI Cleanup** — removes cliches like "delve", "testament", "tapestry"
-
-### Proofread
-Two phases:
-- **Phase 1 (Detection)** — scans for undefined acronyms, overclaiming words, formatting issues
-- **Phase 2 (Fix)** — applies fixes to the approved issues you selected
-
----
-
-## Troubleshooting
-
-| Problem | Solution |
-|---|---|
-| `port 8000` error / port already in use | Another program is using the port. The server uses port **8765** by default. |
-| "Cannot reach server" error in the UI | Make sure the terminal from Step 2 is still running. Don't close it. |
-| "Opened directly from file system" | You opened the HTML file directly. Access via **http://localhost:8765** instead. |
-| `pip install` fails | Make sure Python is installed and added to PATH. Restart your terminal after installing Python. |
-| Blank results or simulation mode | The tool works even without an API key using a built-in rules engine. Results are still useful for basic rewrites. |
-
-## Project structure
+## Project Structure
 
 ```
 Para_Paper/
-├── backend/           # Python FastAPI server (run this)
-│   ├── main.py        # Server entry point
-│   ├── agent_wrapper.py   # AI agent + fallback rules
-│   ├── .agent/skills/ # Skill prompt files
-│   ├── .env           # API key (optional)
+├── backend/                    # Python FastAPI server
+│   ├── main.py                 # Server entry point (port 8765)
+│   ├── agent_wrapper.py        # Agent orchestration + rules engine
+│   ├── medical_vocab.py        # Medical term loader + synonym maps
+│   ├── academic_vocab.py       # AVL/MAWL academic vocabulary loader
+│   ├── english_words_loader.py # English dictionary loader
+│   ├── data/                   # Bundled lexical datasets
+│   │   ├── AVL.json            # Academic Vocabulary List (3K lemmas)
+│   │   └── MAWL.json           # Medical Academic Word List (623 words)
+│   ├── .agent/skills/          # Agent skill prompt files
+│   │   ├── academic_rewording.md
+│   │   ├── academic_rewording_medical.md
+│   │   ├── humanizer_noora.md
+│   │   ├── humanizer_general.md
+│   │   └── proofreading.md
+│   ├── .agent/proofreading_references/  # Reference guides
+│   ├── .env                    # API key (optional — works without)
 │   └── requirements.txt
-├── frontend/          # Web interface
-│   ├── index.html     # Main page
-│   ├── taskpane.js    # Frontend logic
-│   └── taskpane.css   # Styling
-├── humanizer-main/    # Humanizer skill reference
-├── humanizer-Noora/   # Dr. Noora style reference
-├── proof-reading-skill/   # Proofreading skill reference
-└── par4Acad-master/   # Academic NLP resources
+├── frontend/                   # Web UI (served by backend)
+│   ├── index.html
+│   ├── taskpane.js
+│   └── taskpane.css
+├── wordlist-medicalterms-en/   # Medical word list (98K terms)
+├── english-words/              # English dictionary (479K words)
+├── guard-skills/               # Code-quality agent skills
+├── LICENSE
+└── README.md
 ```
+
+## How It Works
+
+### Paraphrase
+Select a style: **Academic**, **Concise**, or **High-Impact**, and a strength (1–5). The engine applies dictionary-based synonym replacement, sentence restructuring, and style-specific transformations. For medical text, select "Medical / Clinical" mode to preserve clinical terminology.
+
+### Humanize
+- **Dr. Noora Style** — Clinical vocabulary, bracket-spacing quirks, citation patterns
+- **General Anti-AI Cleanup** — Removes clichés (delve, testament, tapestry), em-dashes, formulaic transitions
+
+### Proofread
+- **Phase 1 (Diagnose)** — Scans for: undefined acronyms, overclaiming, banned transitions, promotional adjectives, importance-signaling verbs, inflated noun phrases, template shapes, tense inconsistency, low academic density
+- **Phase 2 (Fix)** — Applies corrections for all detected patterns
+
+## Configuration
+
+Set a `GEMINI_API_KEY` in `backend/.env` to use the Gemini API for higher-quality rewrites:
+
+```
+GEMINI_API_KEY=your_key_here
+```
+
+Without the key, all features work locally using the rules-based simulation engine.
+
+## License
+
+MIT
+
+## Acknowledgments
+
+- [glutanimate/wordlist-medicalterms-en](https://github.com/glutanimate/wordlist-medicalterms-en) — Medical vocabulary
+- [dwyl/english-words](https://github.com/dwyl/english-words) — English dictionary
+- [Gardner & Davies (COCA) AVL](https://www.academicvocabulary.info/) — Academic vocabulary
+- [lpmi-13/machine_readable_wordlists](https://github.com/lpmi-13/machine_readable_wordlists) — Machine-readable academic wordlists
+- [paper-revision-editor](https://github.com/anomalyco/paper-revision-editor) — Proofreading patterns and editing principles

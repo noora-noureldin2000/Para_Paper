@@ -71,6 +71,15 @@ function setupTabs() {
   });
 }
 
+// Strength description labels
+const STRENGTH_LABELS = {
+  1: "1 - Light",
+  2: "2 - Light-Moderate",
+  3: "3 - Moderate",
+  4: "4 - Strong",
+  5: "5 - Maximum"
+};
+
 // Event Listeners for Buttons
 function setupEventListeners() {
   // Clear button
@@ -80,19 +89,32 @@ function setupEventListeners() {
     updateStatus("green", "Cleared");
   });
 
+  // Strength slider
+  const strengthSlider = document.getElementById("paraphraseStrength");
+  const strengthValue = document.getElementById("paraphraseStrengthValue");
+  if (strengthSlider) {
+    strengthSlider.addEventListener("input", () => {
+      strengthValue.textContent = STRENGTH_LABELS[strengthSlider.value] || `${strengthSlider.value} - Moderate`;
+    });
+  }
+
   // 1. Paraphrase trigger
   document.getElementById("btnRunParaphrase").addEventListener("click", async () => {
     const text = getInputText();
     if (!text) return;
 
+    const strength = parseInt(document.getElementById("paraphraseStrength").value, 10);
+    const selectedMode = document.querySelector('input[name="paraphraseMode"]:checked').value;
+    const apiEndpoint = selectedMode === "medical" ? `${API_BASE_URL}/api/paraphrase/medical` : `${API_BASE_URL}/api/paraphrase`;
+
     updateStatus("orange", "Paraphrasing...");
     hideInfoBanner();
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/paraphrase`, {
+      const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text, strength })
       });
       
       if (!response.ok) {
@@ -203,12 +225,15 @@ function setupEventListeners() {
         issues.forEach(issue => {
           const item = document.createElement("div");
           item.className = "issue-item";
+          const category = issue.category || "General";
+          const catLower = category.toLowerCase();
           item.innerHTML = `
             <input type="checkbox" class="issue-checkbox" data-id="${issue.id}" checked>
             <div class="issue-details">
               <div class="issue-meta">
                 <span class="issue-id">[Issue #${issue.id}]</span>
                 <span class="severity-badge ${issue.severity.toLowerCase()}">${issue.severity}</span>
+                <span class="category-badge ${catLower}">${category}</span>
                 <span class="issue-location">${issue.location}</span>
               </div>
               <div class="issue-diagnosis">${issue.diagnosis}</div>
