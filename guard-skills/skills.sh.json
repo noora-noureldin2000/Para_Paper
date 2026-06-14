@@ -1,0 +1,23 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Core Guards",
+      "description": "Reactive guardrails for code, tests, and documentation after an agent has produced work. Apply these after any agent writes, edits, or generates code or documentation files in this project.",
+      "skills": [
+        "clean-code-guard",
+        "test-guard",
+        "docs-guard"
+      ]
+    },
+    {
+      "title": "WordPress & WooCommerce Guards",
+      "description": "Reactive shipping checks for WordPress and WooCommerce code. Use woo-guard for WooCommerce order/product/checkout logic; wp-guard for all other WordPress plugin and theme code.",
+      "skills": [
+        "wp-guard",
+        "woo-guard"
+      ]
+    }
+  ]
+}
