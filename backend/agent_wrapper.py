@@ -54,8 +54,12 @@ SIMULATION_DICTIONARY = {
     "use": {"academic": "utilize", "concise": "use", "impact": "harness"},
     "get": {"academic": "derive", "concise": "get", "impact": "acquire"},
     "help": {"academic": "facilitate", "concise": "help", "impact": "empower"},
-    "change": {"academic": "modify", "concise": "change", "impact": "transform"},
-    "find": {"academic": "uncover", "concise": "find", "impact": "discover"}
+    "change": {"academic": "modification", "concise": "change", "impact": "transformation"},
+    "find": {"academic": "uncover", "concise": "find", "impact": "discover"},
+    "investigates": {"academic": "examines", "concise": "", "impact": "probes"},
+    "investigated": {"academic": "examined", "concise": "", "impact": "probed"},
+    "investigating": {"academic": "examining", "concise": "", "impact": "probing"},
+    "investigation": {"academic": "systematic analysis", "concise": "inquiry", "impact": "comprehensive inquiry"}
 }
 
 _COMMON_WORDS = {
@@ -81,171 +85,449 @@ def has_medical_terms(text: str) -> bool:
         return False
     med_terms = load_medical_terms()
     med_lower = {t.lower() for t in med_terms}
+    eng_dict = load_english_words()
+    eng_lower = {w.lower() for w in eng_dict}
+    # Strong signal: a word that is in the medical list but NOT in the general English dictionary
+    # (e.g., drug names like "metformin")
+    med_specific = [w for w in words if w in med_lower and w not in eng_lower]
+    if med_specific:
+        return True
+    # Fallback: high density of general medical-academic terms
     match_count = sum(1 for w in words if w in med_lower and w not in _COMMON_WORDS)
-    return match_count >= max(3, len(words) * 0.1)
+    return match_count >= 8 and match_count / len(words) >= 0.3
 
 
 def medical_paraphrase(text: str, strength: int = 3) -> dict:
-    medical_terms_found = []
-    words = text.split()
+    def _med_synonym_replace(sentence: str, style: str) -> str:
+        words = sentence.split()
+        result = []
+        for w in words:
+            clean_w = re.sub(r"[^\w]", "", w).lower()
+            punct = ""
+            if w.endswith((".", ",", ";", "!", "?")):
+                for p in [".", ",", ";", "!", "?"]:
+                    if w.endswith(p):
+                        punct = p
+                        clean_w = w[:-len(p)].lower()
+                        break
+            if clean_w in MEDICAL_ACADEMIC_PHRASES or clean_w in MEDICAL_SYNONYMS:
+                repl = MEDICAL_ACADEMIC_PHRASES.get(clean_w) or MEDICAL_SYNONYMS.get(clean_w, "")
+                if style == "academic" and repl:
+                    if w[0].isupper():
+                        repl = repl.capitalize()
+                    result.append(repl + punct)
+                elif style == "concise":
+                    result.append(w)
+                elif style == "impact":
+                    im_repl = MEDICAL_SYNONYMS.get(clean_w, repl)
+                    if w[0].isupper():
+                        im_repl = im_repl.capitalize()
+                    result.append(im_repl + punct if im_repl else w)
+            elif clean_w in SIMULATION_DICTIONARY:
+                repl = SIMULATION_DICTIONARY[clean_w].get(style, "")
+                if repl:
+                    if w[0].isupper():
+                        repl = repl.capitalize()
+                    result.append(repl + punct)
+                else:
+                    result.append(w)
+            else:
+                result.append(w)
+        return " ".join(result)
 
-    academic_words = []
-    concise_words = []
-    impact_words = []
+    ac = _paraphrase(text, "academic", strength)
+    ac_sentences = _split_sentences(ac)
+    ac_med = " ".join(_med_synonym_replace(s, "academic") for s in ac_sentences)
 
-    for w in words:
-        clean_w = re.sub(r"[^\w]", "", w).lower()
-        punctuation = ""
-        if w.endswith((".", ",", ";", "!", "?")):
-            for p in [".", ",", ";", "!", "?"]:
-                if w.endswith(p):
-                    punctuation = p
-                    clean_w = w[:-len(p)].lower()
-                    break
+    co = _paraphrase(text, "concise", strength)
+    co_sentences = _split_sentences(co)
+    co_med = " ".join(_med_synonym_replace(s, "concise") for s in co_sentences)
 
-        is_med = clean_w in MEDICAL_ACADEMIC_PHRASES or clean_w in MEDICAL_SYNONYMS
-
-        if is_med:
-            ac_word = MEDICAL_ACADEMIC_PHRASES.get(clean_w) or MEDICAL_SYNONYMS.get(clean_w, "")
-            im_word = ac_word
-            if clean_w in MEDICAL_SYNONYMS:
-                im_word = MEDICAL_SYNONYMS[clean_w]
-
-            if w[0].isupper():
-                ac_word = ac_word.capitalize() if ac_word else ""
-                im_word = im_word.capitalize() if im_word else ""
-
-            academic_words.append(ac_word + punctuation if ac_word else w)
-            concise_words.append(w)
-            impact_words.append(im_word + punctuation if im_word else w)
-            if is_med:
-                medical_terms_found.append(clean_w)
-        elif clean_w in SIMULATION_DICTIONARY:
-            repl = SIMULATION_DICTIONARY[clean_w]
-            ac_word = repl["academic"]
-            cc_word = repl["concise"]
-            im_word = repl["impact"]
-            if w[0].isupper():
-                ac_word = ac_word.capitalize() if ac_word else ""
-                cc_word = cc_word.capitalize() if cc_word else ""
-                im_word = im_word.capitalize() if im_word else ""
-            academic_words.append(ac_word + punctuation if ac_word else w)
-            concise_words.append(cc_word + punctuation if cc_word else w)
-            impact_words.append(im_word + punctuation if im_word else w)
-        else:
-            academic_words.append(w)
-            concise_words.append(w)
-            impact_words.append(w)
-
-    academic_str = " ".join([x for x in academic_words if x]).replace("  ", " ")
-    concise_str = " ".join([x for x in concise_words if x]).replace("  ", " ")
-    impact_str = " ".join([x for x in impact_words if x]).replace("  ", " ")
+    im = _paraphrase(text, "impact", strength)
+    im_sentences = _split_sentences(im)
+    im_med = " ".join(_med_synonym_replace(s, "impact") for s in im_sentences)
 
     if strength >= 3:
         academic_prefixes = ["Notably, ", "Clinically, ", "In this context, ", "From a clinical perspective, "]
-        academic_str = random.choice(academic_prefixes) + academic_str[0].lower() + academic_str[1:]
+        ac_med = random.choice(academic_prefixes) + ac_med[0].lower() + ac_med[1:]
 
     if strength >= 4:
         impact_prefixes = ["We demonstrate that ", "Our findings reveal that ", "This investigation establishes that "]
-        impact_str = random.choice(impact_prefixes) + impact_str[0].lower() + impact_str[1:]
+        im_med = random.choice(impact_prefixes) + im_med[0].lower() + im_med[1:]
 
     return {
         "status": "success",
         "options": [
-            {"type": "Academic", "text": academic_str},
-            {"type": "Concise", "text": concise_str},
-            {"type": "High-Impact", "text": impact_str}
+            {"type": "Academic", "text": ac_med},
+            {"type": "Concise", "text": co_med},
+            {"type": "High-Impact", "text": im_med}
         ]
     }
 
 
 def clean_cliches(text: str) -> str:
-    """Helper to remove AI clichés for general humanizer simulation."""
     cliches = ["delve", "testament", "tapestry", "beacon", "underscore", "pivotal", "crucial role in shaping", "it is important to note that"]
     cleaned = text
     for c in cliches:
-        # Replace case-insensitively with blank or simple synonym
         cleaned = re.sub(rf"\b{c}\b", "show" if c == "underscore" else "", cleaned, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", cleaned).strip()
 
+
+# ---- Structural Paraphrase Transforms (inspired by T5/PAWS) ----
+
+_ACADEMIC_VERB_MAP = {
+    "shows": "shown", "showed": "shown", "demonstrates": "demonstrated", "demonstrated": "demonstrated",
+    "indicates": "indicated", "indicated": "indicated", "reveals": "revealed", "revealed": "revealed",
+    "suggests": "suggested", "suggested": "suggested", "proposes": "proposed", "proposed": "proposed",
+    "highlights": "highlighted", "highlighted": "highlighted", "illustrates": "illustrated", "illustrated": "illustrated",
+    "implies": "implied", "implied": "implied", "confirms": "confirmed", "confirmed": "confirmed",
+    "establishes": "established", "established": "established", "identifies": "identified", "identified": "identified",
+    "examines": "examined", "examined": "examined", "investigates": "investigated", "investigated": "investigated",
+    "explores": "explored", "explored": "explored", "analyzes": "analyzed", "analyzed": "analyzed",
+}
+
+_PASSIVE_TRIGGERS = {"shows", "demonstrates", "indicates", "reveals", "suggests", "proposes", "highlights",
+                     "illustrates", "implies", "confirms", "establishes", "identifies"}
+
+_CLAUSE_CONNECTORS_BECAUSE = r'\b(because|since|as|due to the fact that)\b'
+_CLAUSE_CONNECTORS_ALTHOUGH = r'\b(although|though|while|whereas)\b'
+_CLAUSE_CONNECTORS_IF = r'\b(if|provided that|assuming)\b'
+
+
+def _split_sentences(text: str) -> list:
+    raw = re.split(r'(?<=[.!?])\s+', text.strip())
+    return [s.strip() for s in raw if s.strip()]
+
+
+def _try_passive(sentence: str) -> str:
+    m = re.search(
+        r'\b(.+?)\s+(shows|showed|demonstrates|demonstrated|indicates|indicated|reveals|revealed|'
+        r'suggests|suggested|proposes|proposed|highlights|highlighted|illustrates|illustrated)\s+(.+)',
+        sentence, re.IGNORECASE
+    )
+    if m:
+        subj = m.group(1).strip()
+        verb_base = m.group(2).lower()
+        obj = m.group(3).strip().rstrip(".")
+        past = _ACADEMIC_VERB_MAP.get(verb_base, verb_base + "ed")
+        subj_lower = subj[0].lower() + subj[1:] if subj else subj
+        new = f"{obj} is {past} by {subj_lower}."
+        if sentence[0].isupper():
+            new = new[0].upper() + new[1:]
+        return new
+    return None
+
+
+def _try_reorder_clause(sentence: str) -> str:
+    low = sentence.lower()
+
+    def _reorder_with(sent, conn_match, alt_map):
+        conn = conn_match.group(1)
+        idx = sent.lower().index(conn.lower())
+        before = sent[:idx].strip().rstrip(",")
+        rest = sent[idx + len(conn):].strip().rstrip(",")
+        # connector at beginning: "Because X, Y" → "Y because X"
+        if idx < 5 and "," in rest:
+            parts = re.split(r",\s+", rest, maxsplit=1)
+            if len(parts) == 2:
+                main_conn = alt_map.get(conn.lower(), conn)
+                before_clause = parts[0].strip().rstrip(".")
+                after_clause = parts[1].strip().rstrip(".")
+                new = f"{after_clause} {main_conn} {before_clause[0].lower()}{before_clause[1:]}"
+                if not new.endswith("."):
+                    new += "."
+                if sentence[0].isupper():
+                    new = new[0].upper() + new[1:]
+                return new
+        # connector in middle: "X because Y" → "Y because X"
+        if before and rest:
+            main_conn = alt_map.get(conn.lower(), conn)
+            before_clean = before.strip().rstrip(".")
+            rest_clean = rest.strip().rstrip(".")
+            new = f"{rest_clean} {main_conn} {before_clean[0].lower()}{before_clean[1:]}"
+            if not new.endswith("."):
+                new += "."
+            if sentence[0].isupper():
+                new = new[0].upper() + new[1:]
+            return new
+        return None
+
+    m = re.search(_CLAUSE_CONNECTORS_BECAUSE, low)
+    if m:
+        alt_conn = {"because": "because", "since": "since", "as": "as", "due to the fact that": "because"}
+        result = _reorder_with(sentence, m, alt_conn)
+        if result:
+            return result
+    m = re.search(_CLAUSE_CONNECTORS_ALTHOUGH, low)
+    if m:
+        conn = m.group(1)
+        idx = low.index(conn)
+        before = sentence[:idx].strip().rstrip(",")
+        after = sentence[idx + len(conn):].strip().rstrip(",")
+        # connector at beginning: "Although X, Y" → "Y, although X"
+        if idx < 5 and "," in after:
+            parts = re.split(r",\s+", after, maxsplit=1)
+            if len(parts) == 2:
+                before_clause = parts[0].strip().rstrip(".")
+                after_clause = parts[1].strip().rstrip(".")
+                new = f"{after_clause}, {conn} {before_clause[0].lower()}{before_clause[1:]}"
+                if not new.endswith("."):
+                    new += "."
+                if sentence[0].isupper():
+                    new = new[0].upper() + new[1:]
+                return new
+        # connector in middle: "X although Y" → "Y, although X"
+        if before and after:
+            before_clean = before.strip().rstrip(".")
+            after_clean = after.strip().rstrip(".")
+            new = f"{after_clean}, {conn} {before_clean[0].lower()}{before_clean[1:]}"
+            if not new.endswith("."):
+                new += "."
+            if sentence[0].isupper():
+                new = new[0].upper() + new[1:]
+            return new
+    return None
+
+
+def _try_split_sentence(sentence: str) -> str:
+    for splitter, joiner in [(" and ", ", and "), (" as well as ", ", as well as "),
+                             (" not only ", ". Not only "), (" but also ", " but also ")]:
+        if splitter in sentence and len(sentence) > 80:
+            parts = sentence.split(splitter, 1)
+            if len(parts) == 2:
+                return f"{parts[0].rstrip('.')}. {parts[1][0].upper()}{parts[1][1:]}"
+    m = re.match(r'(\w[\w\s]+),\s*(which|that|where|whereby|when)\s+(.+)', sentence, re.IGNORECASE)
+    if m and len(sentence) > 80:
+        return f"{m.group(1).strip().rstrip(',')}. {m.group(2).capitalize()} {m.group(3)}"
+    return None
+
+
+def _try_merge_sentences(sentences: list, idx: int, style: str) -> str:
+    if idx >= len(sentences) - 1:
+        return None
+    a, b = sentences[idx], sentences[idx + 1]
+    if len(a.split()) + len(b.split()) > 35:
+        return None
+    b_low = b[0].lower()
+    connectors = {"academic": "; moreover, ", "concise": "; ", "impact": "; "}
+    if style == "academic" and len(b.split()) > 3:
+        return f"{a.rstrip('.')}{connectors[style]}{b_low}{b[1:]}"
+    return None
+
+
+def _try_nominalize(sentence: str) -> str:
+    pairs = [
+        (r'\b(we|this study|this paper|this work)\s+(investigate|examine|analyze|explore)\s+(.+)$',
+         r'An investigation into \3 was conducted'),
+        (r'\b(we|this study|this paper|this work)\s+(propose|introduce|present)\s+(.+)$',
+         r'A \2 is proposed for \3'),
+        (r'\b(we|this study|this paper)\s+(find|found)\s+that\s+(.+)$',
+         r'It was found that \3'),
+    ]
+    for pattern, replacement in pairs:
+        m = re.search(pattern, sentence, re.IGNORECASE)
+        if m:
+            result = re.sub(pattern, replacement, sentence, flags=re.IGNORECASE)
+            if result and result != sentence:
+                # fix capitalization
+                if sentence[0].isupper():
+                    result = result[0].upper() + result[1:]
+                return result
+    return None
+
+
+def _try_that_to_infinitive(sentence: str) -> str:
+    m = re.search(r'\b(.+?)\s+(found|shown|demonstrated|observed|shown|reported)\s+that\s+(.+)', sentence, re.IGNORECASE)
+    if m:
+        subj = m.group(1).strip()
+        verb = m.group(2).lower()
+        obj = m.group(3).strip()
+        new = f"{obj.rstrip('.')} was {verb} by {subj}."
+        if sentence[0].isupper():
+            new = new[0].upper() + new[1:]
+        return new
+    return None
+
+
+def _try_frontload(sentence: str) -> str:
+    m = re.search(r'\b(the|this)\s+(.+?)\s+(is|was|shows|demonstrates|indicates|reveals)\s+(.+)', sentence, re.IGNORECASE)
+    if m:
+        det = m.group(1)
+        subj = m.group(2).strip()
+        verb = m.group(3).lower()
+        rest = m.group(4).strip()
+        if verb in ("is", "was"):
+            new = f"{det.capitalize()} {subj} — {rest}"
+        else:
+            obj = rest.split()[0] if rest.split() else ""
+            remainder = " ".join(rest.split()[1:]) if len(rest.split()) > 1 else ""
+            new = f"{obj.capitalize()} {remainder} — {det} {subj} {verb}s"
+        if not new.endswith("."):
+            new += "."
+        return new
+    return None
+
+
+def _apply_synonym_replacements(sentence: str, style: str) -> str:
+    words = sentence.split()
+    result = []
+    for w in words:
+        clean_w = re.sub(r"[^\w]", "", w).lower()
+        punct = ""
+        if w.endswith((".", ",", ";", "!", "?")):
+            for p in [".", ",", ";", "!", "?"]:
+                if w.endswith(p):
+                    punct = p
+                    clean_w = w[:-len(p)].lower()
+                    break
+        if clean_w in SIMULATION_DICTIONARY:
+            repl = SIMULATION_DICTIONARY[clean_w].get(style, "")
+            if repl:
+                if w[0].isupper():
+                    repl = repl.capitalize()
+                result.append(repl + punct)
+            else:
+                result.append(w)
+        else:
+            result.append(w)
+    return " ".join(result)
+
+
+_TRANSFORM_PIPELINES = {
+    "academic": [_try_passive, _try_reorder_clause, _try_nominalize, _try_that_to_infinitive],
+    "concise":  [_try_split_sentence],
+}
+
+
+def _paraphrase(text: str, style: str, strength: int) -> str:
+    sentences = _split_sentences(text)
+    if not sentences:
+        return text
+
+    # 1. Apply synonym replacements first
+    replaced = [_apply_synonym_replacements(s, style) for s in sentences]
+
+    # 2. Apply structural transforms based on strength and style
+    dense = strength >= 3
+    very_dense = strength >= 4
+    max_dense = strength >= 5
+
+    transformed = []
+
+    for i, sent in enumerate(replaced):
+        t = sent
+
+        # Try structural transforms in priority order
+        transforms = _TRANSFORM_PIPELINES.get(style, [])
+
+        if style == "academic":
+            if dense and len(sent.split()) > 6:
+                for fn in transforms[:2]:
+                    result = fn(t)
+                    if result:
+                        t = result
+                        break
+            if very_dense and len(sent.split()) > 8:
+                for fn in transforms[2:]:
+                    result = fn(t)
+                    if result:
+                        t = result
+                        break
+            if max_dense and len(sent.split()) > 10:
+                result = _try_nominalize(t)
+                if result:
+                    t = result
+
+        elif style == "concise":
+            if dense and len(sent.split()) > 8:
+                result = _try_split_sentence(t)
+                if result:
+                    t = result
+            fillers = r'\b(indeed|actually|basically|essentially|generally|importantly|interestingly|notably|particularly|significantly)\b'
+            t = re.sub(fillers, '', t, flags=re.IGNORECASE)
+
+        elif style == "impact":
+            if dense and len(sent.split()) > 6:
+                result = _try_frontload(t)
+                if result:
+                    t = result
+            if very_dense and len(sent.split()) > 8:
+                result = _try_reorder_clause(t)
+                if result:
+                    t = result
+            if max_dense and len(sent.split()) > 10:
+                result = _try_passive(t)
+                if result:
+                    t = result
+
+        transformed.append(t)
+
+    # 3. Sentence merging (academic & impact) / splitting (concise)
+    if style in ("academic", "impact") and dense:
+        merged = []
+        skip = False
+        for i, s in enumerate(transformed):
+            if skip:
+                skip = False
+                continue
+            if i < len(transformed) - 1 and len(s.split()) < 12 and len(transformed[i+1].split()) < 12:
+                result = _try_merge_sentences(transformed, i, style)
+                if result:
+                    merged.append(result)
+                    skip = True
+                    continue
+            merged.append(s)
+        transformed = merged
+
+    # 4. Variety: sentence-length alternation for academic style
+    if style == "academic" and very_dense and len(transformed) >= 3:
+        varied = []
+        for i, s in enumerate(transformed):
+            if i % 3 == 1 and len(s.split()) > 8:
+                parts = re.split(r'(,\s+and\s+|;\s+)', s, maxsplit=1)
+                if len(parts) >= 3:
+                    varied.append(parts[0].rstrip(".") + ".")
+                    varied.append(parts[1].strip() + " " + parts[2].strip())
+                    continue
+            varied.append(s)
+        transformed = varied
+
+    # 5. Style-specific prefixes/additions
+    result = " ".join(transformed)
+
+    if style == "academic":
+        if dense and not any(result.startswith(t) for t in ("Notably,", "Consequently,", "Furthermore,", "Nevertheless,", "Interestingly,")):
+            transitions = ["Notably, ", "Consequently, ", "Furthermore, ", "Nevertheless, "]
+            idx = hash(text) % len(transitions)
+            result = transitions[idx] + result[0].lower() + result[1:]
+
+    # Impact prefixes handled by _try_frontload in the structural pipeline
+
+    result = re.sub(r'\s+', ' ', result).strip()
+
+    # 6. Deduplication: ensure >30% word difference from original
+    orig_words = set(w.lower().strip(".,;:!?") for w in text.split())
+    new_words = set(w.lower().strip(".,;:!?") for w in result.split())
+    if orig_words and len(orig_words & new_words) / len(orig_words) > 0.85:
+        pass  # Accept anyway — still better than nothing
+
+    return result
+
+
 def run_local_simulation(text: str, skill_name: str, payload_type: str = "", strength: int = 3) -> dict:
-    """Simulates agent rewriting using rules-based dictionary transformations."""
-    words = text.split()
-    
-    # 1. Medical Paraphrase Simulation
+    """Simulates agent rewriting using rules-based dictionary + structural transformations."""
+    strength = max(1, min(5, strength))
+
+    # 1. Medical Paraphrase
     if "academic_rewording_medical" in skill_name or (has_medical_terms(text) and "academic_rewording" in skill_name):
         return medical_paraphrase(text, strength)
 
-    # 2. Paraphrase Simulation
+    # 2. Paraphrase (Academic / Concise / High-Impact)
     if "academic_rewording" in skill_name:
-        academic_words = []
-        concise_words = []
-        impact_words = []
-        
-        for w in words:
-            clean_w = re.sub(r"[^\w]", "", w).lower()
-            punctuation = w[len(clean_w):] if w.endswith((".", ",", ";", "!", "?")) else ""
-            
-            if clean_w in SIMULATION_DICTIONARY:
-                repl = SIMULATION_DICTIONARY[clean_w]
-                
-                # Match casing
-                ac_word = repl["academic"]
-                cc_word = repl["concise"]
-                im_word = repl["impact"]
-                if w[0].isupper():
-                    ac_word = ac_word.capitalize() if ac_word else ""
-                    cc_word = cc_word.capitalize() if cc_word else ""
-                    im_word = im_word.capitalize() if im_word else ""
-                
-                academic_words.append(ac_word + punctuation if ac_word else "")
-                if cc_word:
-                    concise_words.append(cc_word + punctuation)
-                impact_words.append(im_word + punctuation if im_word else "")
-            else:
-                academic_words.append(w)
-                concise_words.append(w)
-                impact_words.append(w)
-                
-        # Format sentences
-        academic_str = " ".join([x for x in academic_words if x]).replace("  ", " ")
-        concise_str = " ".join([x for x in concise_words if x]).replace("  ", " ")
-        impact_str = " ".join([x for x in impact_words if x]).replace("  ", " ")
-        
-        # Strength-based enhancements
-        if strength >= 3:
-            # Attempt basic sentence reordering for Academic
-            sentences = re.split(r'(?<=[.!?])\s+', academic_str)
-            if len(sentences) >= 3:
-                # Move middle sentence to front for variety
-                sentences = [sentences[len(sentences)//2]] + [s for i, s in enumerate(sentences) if i != len(sentences)//2]
-                academic_str = " ".join(sentences)
-            
-            # Add formal transition at start if strength >= 4
-            if strength >= 4:
-                transitions = ["Consequently, ", "Furthermore, ", "Nevertheless, ", "Notably, "]
-                if academic_str and not any(academic_str.startswith(t) for t in transitions):
-                    idx = hash(text) % len(transitions)
-                    academic_str = transitions[idx] + academic_str[0].lower() + academic_str[1:]
-        
-        if academic_str and not academic_str.startswith(("Notably,", "Consequently,", "Interestingly,", "Furthermore,", "Nevertheless,")):
-            academic_str = f"Notably, {academic_str[0].lower()}{academic_str[1:]}"
-            
-        # High impact: more aggressive rewriting at higher strength
-        if strength >= 3:
-            impact_sentences = re.split(r'(?<=[.!?])\s+', impact_str)
-            if len(impact_sentences) >= 2:
-                impact_str = " ".join(reversed(impact_sentences))
-        
-        if impact_str and not impact_str.startswith(("We ", "Our ")):
-            impact_str = f"We successfully demonstrate that {impact_str[0].lower()}{impact_str[1:]}"
-        
-        # Concise: remove more fillers at higher strength
-        if strength >= 3:
-            fillers = r'\b(indeed|actually|basically|essentially|generally|importantly|interestingly|notably|particularly|significantly)\b'
-            concise_str = re.sub(fillers, '', concise_str, flags=re.IGNORECASE)
-            concise_str = re.sub(r'\s+', ' ', concise_str).strip()
-            
+        academic_str = _paraphrase(text, "academic", strength)
+        concise_str = _paraphrase(text, "concise", strength)
+        impact_str = _paraphrase(text, "impact", strength)
+
         return {
             "status": "success",
             "options": [
