@@ -1014,11 +1014,23 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
 # =====================================================================
 
 _HUMANIZER_AI_PHRASES = [
-    (r'\bfurthermore\b', ['also', 'and', 'on top of that', 'plus']),
+    # --- Transition words (replace with casual alternatives) ---
+    (r'\bfurthermore\b', ['also', 'and', 'plus']),
     (r'\bmoreover\b', ['also', 'and', 'besides', "what's more"]),
-    (r'\badditionally\b', ['also', 'and', 'plus', 'on top of that']),
-    (r'\bconsequently\b', ['so', 'which means', 'as a result', 'because of that']),
-    (r'\bsignificantly\b', ['noticeably', 'considerably', 'to a meaningful extent']),
+    (r'\badditionally\b', ['also', 'and', 'plus']),
+    (r'\bconsequently\b', ['so', 'which means', 'because of that']),
+    (r'\btherefore\b', ['so', 'thus', 'that is why']),
+    (r'\bthus\b', ['so', 'hence', 'therefore']),
+    (r'\bhence\b', ['so', 'thus']),
+    (r'\bnevertheless\b', ['still', 'even so', 'yet']),
+    (r'\bnonetheless\b', ['still', 'even so', 'yet']),
+    (r'\bnotwithstanding\b', ['even so', 'despite that', 'still']),
+    (r'\bwhereas\b', ['while', 'but', 'though']),
+    (r'\bconversely\b', ['on the flip side', 'meanwhile', 'in contrast']),
+    (r'\baccordingly\b', ['so', 'thus', 'therefore']),
+
+    # --- Adverbs (downshift to simpler) ---
+    (r'\bsignificantly\b', ['noticeably', 'considerably', 'a lot']),
     (r'\bsubstantially\b', ['considerably', 'to a large extent', 'markedly']),
     (r'\bnotably\b', ['especially', 'worth noting', 'interestingly']),
     (r'\bremarkably\b', ['surprisingly', 'strikingly', 'quite notably']),
@@ -1027,11 +1039,32 @@ _HUMANIZER_AI_PHRASES = [
     (r'\bfundamentally\b', ['at its core', 'in essence', 'in principle']),
     (r'\bultimately\b', ['in the end', 'in the final analysis', 'eventually']),
     (r'\binherently\b', ['naturally', 'by its nature', 'built into it']),
+    (r'\bsimilarly\b', ['in the same way', 'likewise', 'also']),
+    (r'\bconversely\b', ['on the other hand', 'in contrast', 'meanwhile']),
+
+    # --- AI overused verbs ---
     (r'\butilize\b', ['use', 'make use of', 'employ']),
     (r'\bfacilitate\b', ['help with', 'make easier', 'enable']),
     (r'\bleverage\b', ['use', 'take advantage of', 'build on']),
     (r'\boptimize\b', ['improve', 'make better', 'fine-tune']),
     (r'\bimplement\b', ['set up', 'put in place', 'adopt']),
+    (r'\bdemonstrates?\b', ['shows', 'indicates', 'suggests']),
+    (r'\belucidates?\b', ['explains', 'shows', 'clarifies']),
+    (r'\bdelineates?\b', ['describes', 'outlines', 'defines']),
+    (r'\bunderscores?\b', ['shows', 'highlights', 'stresses']),
+    (r'\bhighlight(?:s|ed)?\b', ['points out', 'stresses', 'emphasizes']),
+    (r'\billuminates?\b', ['clarifies', 'shows', 'explains']),
+    (r'\bexemplifies?\b', ['shows', 'is an example of']),
+    (r'\baddresses?\b', ['deals with', 'handles', 'covers']),
+    (r'\bexplores?\b', ['looks at', 'considers', 'examines']),
+    (r'\bcorroborates?\b', ['backs up', 'supports', 'confirms']),
+    (r'\bsubstantiates?\b', ['backs up', 'proves', 'supports']),
+    (r'\bpostulates?\b', ['suggests', 'proposes', 'claims']),
+    (r'\bhypothesizes?\b', ['suggests', 'proposes', 'guesses']),
+    (r'\bachieves?\b', ['reaches', 'attains', 'gets']),
+    (r'\belucidates?\b', ['explains', 'shows', 'clarifies']),
+
+    # --- AI overused nouns ---
     (r'\bcomprehensive\b', ['thorough', 'complete', 'full']),
     (r'\binnovative\b', ['new', 'fresh', 'creative']),
     (r'\btransformative\b', ['major', 'significant', 'far-reaching']),
@@ -1039,34 +1072,109 @@ _HUMANIZER_AI_PHRASES = [
     (r'\bstreamline\b', ['simplify', 'make smoother', 'improve']),
     (r'\bcrucial\b', ['key', 'critical']),
     (r'\bpivotal\b', ['key', 'important', 'central']),
+    (r'\bcomprehensive\b', ['thorough', 'complete', 'full']),
+    (r'\bgroundbreaking\b', ['important', 'significant', 'major']),
+    (r'\bnovel\b', ['new', 'fresh', 'different']),
+    (r'\brobust\b', ['strong', 'solid', 'reliable']),
+    (r'\bdynamic\b', ['active', 'changing', 'evolving']),
+    (r'\bseamless(?:ly)?\b', ['smooth', 'natural']),
+    (r'\bcutting-edge\b', ['latest', 'advanced', 'modern']),
+    (r'\bstate-of-the-art\b', ['latest', 'most advanced']),
+    (r'\bgame-changer\b', ['major shift', 'big deal', 'turning point']),
+    (r'\bparadigm shift\b', ['major change', 'fundamental change']),
+    (r'\bempowers?\b', ['enables', 'allows', 'helps']),
+    (r'\brevolutionize\b', ['change', 'transform', 'overhaul']),
+
+    # --- AI phrase constructions ---
     (r'\bit is evident that\b', ['clearly', 'obviously']),
     (r'\bit is clear that\b', ['clearly', 'obviously']),
+    (r'\bit is apparent that\b', ['clearly', 'seems', 'apparently']),
+    (r'\bit is noteworthy that\b', ['importantly', 'notably']),
     (r'\bhas the potential to\b', ['could', 'might', 'may']),
+    (r'\bplays?\s+a\s+(?:crucial|pivotal|key|vital)\s+role\b', ['is central to', 'matters in', 'is important for']),
+    (r'\bit is important to note\b(?:\s+that)?', ['']),
+    (r'\bit is worth noting\b(?:\s+that)?', ['']),
+    (r'\bit is worth mentioning\b', ['']),
+    (r'\bit should be noted that\b', ['']),
+    (r'\bit can be seen that\b', ['']),
+    (r'\bit is interesting to note that\b', ['']),
+    (r'\bimportantly\b', ['']),
+    (r'\bnotably\b(?:,\s*)?', ['']),
+
+    # --- Academic conclusions (remove or shorten) ---
     (r'\bin conclusion\b', ['']),
     (r'\bin summary\b', ['']),
     (r'\bto summarize\b', ['']),
+    (r'\bto conclude\b', ['']),
+    (r'\bin closing\b', ['']),
+    (r'\boverall,\s*', ['']),
+    (r'\bin general,\s*', ['']),
+
+    # --- Wordy academic phrases ---
+    (r'\bin order to\b', ['to']),
+    (r'\bdue to the fact that\b', ['because', 'since']),
+    (r'\bwith respect to\b', ['about', 'for', 'in']),
+    (r'\bwith regard to\b', ['about', 'for']),
+    (r'\bas well as\b', ['and', 'plus', 'along with']),
+    (r'\bin addition to\b', ['besides', 'along with', 'plus']),
+    (r'\ba number of\b', ['some', 'several', 'various']),
+    (r'\bthe majority of\b', ['most', 'many']),
+    (r'\ba significant number of\b', ['many', 'a lot of']),
+    (r'\bit is possible that\b', ['maybe', 'perhaps', 'possibly']),
+    (r'\bit is likely that\b', ['probably', 'most likely']),
+    (r'\bthere is a growing body of evidence\b', ['more evidence shows', 'evidence suggests']),
+    (r'\bthere is increasing evidence\b', ['more evidence shows', 'evidence suggests']),
+    (r'\bprevious studies have shown\b', ['past work shows', 'earlier studies found']),
+    (r'\bprior work\b', ['past studies', 'earlier work']),
+    (r'\brecent research\b', ['new work', 'recent studies']),
+    (r'\ba growing body of literature\b', ['more studies', 'existing research']),
+    (r'\bin the context of\b', ['in', 'within', 'for']),
+    (r'\bin terms of\b', ['for', 'in', 'regarding']),
+    (r'\bin light of\b', ['given', 'because of']),
+    (r'\bon the basis of\b', ['based on', 'from']),
+    (r'\bby means of\b', ['through', 'using', 'with']),
+    (r'\bpertaining to\b', ['about', 'on', 'regarding']),
+    (r'\bwith the aim of\b', ['to', 'aiming to']),
+    (r'\bfor the purpose of\b', ['to', 'for']),
+    (r'\bat the present time\b', ['now', 'currently']),
+    (r'\bat this point in time\b', ['now', 'currently']),
+    (r'\bin the event that\b', ['if', 'should']),
+    (r'\bin the case of\b', ['for', 'with']),
+
+    # --- Paper/study boilerplate ---
+    (r'\bin this paper,\s*we\b', ['we']),
+    (r'\bthis paper presents?\b', ['we present', 'this work presents']),
+    (r'\bthis paper proposes?\b', ['we propose', 'this work proposes']),
+    (r'\bthis paper introduces?\b', ['we introduce', 'this work introduces']),
+    (r'\bin this work\b', ['here', 'in this study']),
+    (r'\bin this study\b', ['here', 'in this work']),
+    (r'\bthe present study\b', ['this study', 'our work']),
+    (r'\bthe rest of this paper\b', ['']),
+    (r'\bthe remainder of this paper\b', ['']),
+
+    # --- Cliché nouns ---
     (r'\bdelves?\s+into\b', ['looks at', 'explores', 'investigates']),
     (r'\blandscape\b', ['area', 'field', 'domain']),
     (r'\bmultifaceted\b', ['complex', 'many-sided']),
-    (r'\bseamless(?:ly)?\b', ['smooth', 'natural', 'effortless']),
     (r'\bnumerous\b', ['many', 'several', 'lots of']),
     (r'\ba variety of\b', ['different', 'various', 'diverse']),
     (r'\ba multitude of\b', ['many', 'numerous', 'countless']),
     (r'\bin the realm of\b', ['in', 'within', 'regarding']),
     (r'\bshowcase\b', ['show', 'display', 'highlight']),
-    (r'\brobust\b', ['strong', 'solid', 'reliable']),
-    (r'\bdynamic\b', ['active', 'changing', 'evolving']),
-    (r'\bempowers?\b', ['enables', 'allows', 'helps']),
-    (r'\brevolutionize\b', ['change', 'transform', 'overhaul']),
-    (r'\bcutting-edge\b', ['latest', 'advanced', 'modern']),
-    (r'\bstate-of-the-art\b', ['latest', 'most advanced']),
-    (r'\bgame-changer\b', ['major shift', 'big deal', 'turning point']),
-    (r'\bparadigm shift\b', ['major change', 'fundamental change']),
-    (r'\bit is important to note\b(?:\s+that)?', ['']),
-    (r'\bit is worth noting\b(?:\s+that)?', ['']),
-    (r'\bit is worth mentioning\b', ['']),
-    (r'\bplays?\s+a\s+(?:crucial|pivotal|key|vital)\s+role\b', ['is central to', 'matters in', 'is important for']),
+    (r'\btestament\b', ['proof', 'evidence', 'sign']),
+    (r'\btapestry\b', ['range', 'mix', 'variety']),
+    (r'\bintricate\b', ['complex', 'detailed', 'careful']),
+    (r'\bnuanced\b', ['subtle', 'detailed', 'careful']),
+    (r'\bparadigm\b', ['model', 'approach', 'framework']),
+
+    # --- Specific AI filler nouns ---
+    (r'\ba plethora of\b', ['many', 'a lot of', 'plenty of']),
+    (r'\ban array of\b', ['a range of', 'several', 'many']),
+    (r'\ba wide range of\b', ['many', 'various', 'diverse']),
+    (r'\bthe fact that\b', ['how', 'that']),
 ]
+
+# Total: 108 entries
 
 _HUMANIZER_CONTRACTIONS = [
     ("don't", "do not"), ("can't", "cannot"), ("won't", "will not"),
@@ -1082,6 +1190,15 @@ _HUMANIZER_CONTRACTIONS = [
     ("there's", "there is"), ("here's", "here is"), ("let's", "let us"),
 ]
 
+_HUMANIZER_EXTRA_CONTRACTIONS = [
+    ("gonna", "going to"),
+    ("wanna", "want to"),
+    ("kinda", "kind of"),
+    ("sorta", "sort of"),
+    ("gotta", "got to"),
+    ("dunno", "do not know"),
+]
+
 _HUMANIZER_FORMAL_INSERTIONS = [
     '-- though this remains debated',
     '-- at least in principle',
@@ -1089,6 +1206,7 @@ _HUMANIZER_FORMAL_INSERTIONS = [
     'notably.',
     '-- a point worth emphasizing.',
     'in practice.',
+    '-- though this is still uncertain.',
 ]
 
 _HUMANIZER_RHETORICAL_QUESTIONS = [
@@ -1096,6 +1214,8 @@ _HUMANIZER_RHETORICAL_QUESTIONS = [
     'What are the implications?',
     'How significant is this finding?',
     'What does this tell us?',
+    'Worth asking -- what next?',
+    'But is that really the case?',
 ]
 
 
@@ -1129,53 +1249,239 @@ def _humanize_strip_ai_phrases(text: str, strength: int) -> str:
     return result
 
 
-def _humanize_swap_synonyms(text: str) -> str:
-    safe_synonyms = {
-        'show': ['indicate', 'reveal', 'suggest'],
-        'shows': ['indicates', 'reveals', 'suggests'],
-        'showed': ['indicated', 'revealed', 'suggested'],
-        'use': ['apply', 'employ', 'utilize'],
-        'uses': ['applies', 'employs'],
-        'get': ['obtain', 'acquire', 'derive'],
-        'gets': ['obtains', 'acquires'],
-        'help': ['aid', 'assist', 'support'],
-        'helps': ['aids', 'assists'],
-        'big': ['large', 'major', 'substantial'],
-        'small': ['minor', 'limited', 'modest'],
-        'good': ['positive', 'favorable', 'beneficial'],
-        'bad': ['negative', 'adverse', 'unfavorable'],
-        'new': ['novel', 'recent', 'emerging'],
-        'old': ['prior', 'previous', 'established'],
-        'change': ['alter', 'modify', 'adjust'],
-        'changes': ['alters', 'modifies'],
-        'find': ['detect', 'identify', 'observe'],
-        'finds': ['detects', 'identifies'],
-        'give': ['provide', 'supply', 'offer'],
-        'gives': ['provides', 'offers'],
-        'make': ['produce', 'generate', 'create'],
-        'makes': ['produces', 'generates'],
-        'take': ['require', 'need', 'necessitate'],
-        'way': ['method', 'approach', 'means'],
-        'part': ['component', 'element', 'portion'],
-        'thing': ['aspect', 'factor', 'element'],
-        'often': ['frequently', 'commonly', 'regularly'],
-        'always': ['consistently', 'invariably', 'persistently'],
-        'maybe': ['perhaps', 'possibly', 'potentially'],
-        'very': ['quite', 'highly', 'extremely', 'notably'],
-    }
+def _humanize_swap_synonyms(text: str, is_formal: bool = True) -> str:
+    style = "academic" if is_formal else "concise"
     words = text.split()
     result = []
     for w in words:
         clean = re.sub(r'[^a-zA-Z]', '', w)
         punct = w[len(clean):] if len(clean) < len(w) else ''
-        if clean and clean.lower() in safe_synonyms and _random_chance(0.2):
-            alt = random.choice(safe_synonyms[clean.lower()])
+        if clean and clean.lower() in SIMULATION_DICTIONARY and _random_chance(0.25):
+            entry = SIMULATION_DICTIONARY[clean.lower()]
+            candidates = entry.get(style, entry.get("concise", []))
+            if candidates and candidates[0] != '':
+                alt = random.choice(candidates)
+                if clean[0].isupper():
+                    alt = alt.capitalize()
+                result.append(alt + punct)
+            else:
+                result.append(w)
+        elif clean and clean.lower() in _HUMANIZER_BASIC_SYNONYMS and _random_chance(0.15):
+            alt = random.choice(_HUMANIZER_BASIC_SYNONYMS[clean.lower()])
             if clean[0].isupper():
                 alt = alt.capitalize()
             result.append(alt + punct)
         else:
             result.append(w)
     return ' '.join(result)
+
+_HUMANIZER_BASIC_SYNONYMS = {
+    'show': ['indicate', 'reveal', 'suggest'],
+    'shows': ['indicates', 'reveals', 'suggests'],
+    'showed': ['indicated', 'revealed', 'suggested'],
+    'big': ['large', 'major', 'substantial'],
+    'small': ['minor', 'limited', 'modest'],
+    'good': ['positive', 'favorable', 'beneficial'],
+    'bad': ['negative', 'adverse', 'unfavorable'],
+    'new': ['novel', 'recent', 'emerging'],
+    'old': ['prior', 'previous', 'established'],
+    'change': ['alter', 'modify', 'adjust'],
+    'changes': ['alters', 'modifies'],
+    'find': ['detect', 'identify', 'observe'],
+    'finds': ['detects', 'identifies'],
+    'give': ['provide', 'supply', 'offer'],
+    'gives': ['provides', 'offers'],
+    'make': ['produce', 'generate', 'create'],
+    'makes': ['produces', 'generates'],
+    'many': ['several', 'numerous', 'various', 'multiple'],
+    'very': ['quite', 'highly', 'extremely', 'notably'],
+    'also': ['further', 'likewise', 'additionally'],
+}
+
+_HUMANIZER_HEDGES = [
+    'seems', 'appears', 'tends to', 'might', 'could',
+    'likely', 'arguably', 'suggests that', 'may',
+]
+
+_HUMANIZER_SENTENCE_STARTERS = [
+    'Interestingly,', 'Notably,', 'However,',
+    'In practice,', 'Broadly speaking,', 'If anything,',
+]
+_HUMANIZER_SENTENCE_STARTERS_CASUAL = [
+    'Actually,', 'Basically,', 'Honestly,',
+    'To be fair,', 'You know,', 'Thing is,',
+    'The way I see it,', 'What I mean is,',
+]
+
+_HUMANIZER_COLLOQUIAL_MAPPING = {
+    'investigate': ['look into', 'check out', 'dig into'],
+    'investigates': ['looks into', 'checks out', 'digs into'],
+    'investigated': ['looked into', 'checked out', 'dug into'],
+    'demonstrate': ['show', 'prove'],
+    'demonstrates': ['shows', 'proves'],
+    'demonstrated': ['showed', 'proved'],
+    'continue': ['keep going', 'press on'],
+    'continues': ['keeps going', 'presses on'],
+    'determine': ['figure out', 'nail down'],
+    'determines': ['figures out', 'nails down'],
+    'determined': ['figured out', 'nailed down'],
+    'establish': ['set up', 'build'],
+    'establishes': ['sets up', 'builds'],
+    'established': ['set up', 'built'],
+    'obtain': ['get', 'grab'],
+    'obtains': ['gets', 'grabs'],
+    'obtained': ['got', 'grabbed'],
+    'attempt': ['try', 'give it a go'],
+    'attempts': ['tries', 'gives it a go'],
+    'attempted': ['tried', 'gave it a go'],
+}
+
+
+def _humanize_burstiness(text: str, strength: int) -> str:
+    intensity = {1: 0.1, 2: 0.2, 3: 0.35, 4: 0.50, 5: 0.70}[strength]
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    if not paragraphs:
+        paragraphs = [text]
+    result_paras = []
+    for para in paragraphs:
+        sentences = _humanize_split_sentences(para)
+        if len(sentences) <= 1:
+            result_paras.append(para)
+            continue
+        # Measure sentence lengths in words
+        lengths = [len(s.split()) for s in sentences]
+        # For each adjacent pair, if they are within 5 words AND within 40% of each other,
+        # try to break one apart or add a parenthetical
+        modified = list(sentences)
+        for i in range(len(modified) - 1):
+            if _random_chance(intensity):
+                l1 = len(modified[i].split())
+                l2 = len(modified[i+1].split())
+                if l1 > 0 and l2 > 0:
+                    ratio = min(l1, l2) / max(l1, l2) if max(l1, l2) > 0 else 1
+                    if abs(l1 - l2) <= 5 and ratio > 0.6:
+                        # Split the longer sentence or add parenthetical to vary length
+                        if l1 >= l2 and l1 >= 12:
+                            # Try to split sentence i at a comma/conjunction
+                            split_match = re.search(r',\s+(?:and|but|or|while|whereas)\s+', modified[i])
+                            if split_match and split_match.start() > 5:
+                                split_pos = split_match.end()
+                                first = modified[i][:split_match.start()]
+                                second = modified[i][split_pos:]
+                                if first and second:
+                                    modified[i] = first + '. ' + second[0].upper() + second[1:]
+                        else:
+                            # Add a short parenthetical
+                            frag = random.choice(['-- notably', '-- perhaps', '-- for instance', '-- in fact'])
+                            modified[i] = modified[i] + ' ' + frag
+        # At high strength, insert short sentences for burstiness
+        if strength >= 4:
+            for i in range(len(modified) - 1):
+                if _random_chance(intensity * 0.3):
+                    l1 = len(modified[i].split())
+                    if l1 >= 15:
+                        frag = random.choice([
+                            'This matters.',
+                            'Think about that for a second.',
+                            'It is not that simple though.',
+                            'But context matters here.',
+                            'The data speaks for itself.',
+                        ])
+                        modified.insert(i + 1, frag)
+                        break
+        result_paras.append(' '.join(modified))
+    return '\n\n'.join(result_paras)
+
+
+def _humanize_hedging(text: str, strength: int) -> str:
+    intensity = {1: 0.05, 2: 0.10, 3: 0.20, 4: 0.30, 5: 0.45}[strength]
+    result = text
+    # Hedge definitive verbs
+    hedge_patterns = [
+        (r'\bThe\s+results?\s+(show|demonstrate|prove|establish|confirm|indicate|reveal)s?\b',
+         lambda m: re.sub(r'(show|demonstrate|prove|establish|confirm|indicate|reveal)s?',
+                          lambda n: {'shows': 'seems to show', 'show': 'seem to show',
+                                     'demonstrates': 'appears to demonstrate', 'demonstrate': 'appear to demonstrate',
+                                     'proves': 'arguably proves', 'prove': 'arguably prove',
+                                     'indicates': 'suggests', 'indicate': 'suggest',
+                                     'reveals': 'tends to reveal', 'reveal': 'tend to reveal',
+                                     'confirms': 'appears to confirm', 'confirm': 'appear to confirm',
+                                     'establishes': 'arguably establishes', 'establish': 'arguably establish'
+                                     }.get(n.group(0), n.group(0)), m.group(0))),
+        (r'\bThis\s+(study|work|paper|finding|result)\s+(show|demonstrate|prove|establish|confirm)s?\b',
+         lambda m: re.sub(r'(show|demonstrate|prove|establish|confirm)s?',
+                          lambda n: {'shows': 'suggests', 'show': 'suggest',
+                                     'demonstrates': 'seems to indicate', 'demonstrate': 'seem to indicate',
+                                     'proves': 'suggests', 'prove': 'suggest',
+                                     'confirms': 'appears to support', 'confirm': 'appear to support'
+                                     }.get(n.group(0), n.group(0)), m.group(0))),
+        (r'\b(clearly|evidently|undoubtedly|unquestionably|certainly)\b',
+         lambda m: random.choice(['arguably', 'plausibly', 'in many respects', ''])),
+        (r'\bit is\s+(clear|evident|apparent|obvious)\s+that\b',
+         lambda m: random.choice(['it seems that', 'one could argue that', 'it may be that', ''])),
+    ]
+    for pattern, replacer in hedge_patterns:
+        if _random_chance(intensity):
+            result = re.sub(pattern, replacer, result, flags=re.IGNORECASE)
+    # Add casual hedges mid-sentence
+    if strength >= 3:
+        sentences = _humanize_split_sentences(result)
+        mod_sents = []
+        for s in sentences:
+            if _random_chance(intensity * 0.3):
+                words_list = s.split()
+                if len(words_list) > 6:
+                    pos = random.randint(2, max(3, len(words_list) - 3))
+                    hedge = random.choice(['sort of', 'kind of', 'in a way', 'arguably', 'basically'])
+                    words_list.insert(pos, hedge)
+                    s = ' '.join(words_list)
+            mod_sents.append(s)
+        result = ' '.join(mod_sents)
+    return result
+
+
+def _humanize_sentence_starters(text: str, strength: int, is_formal: bool) -> str:
+    intensity = {1: 0.05, 2: 0.10, 3: 0.15, 4: 0.25, 5: 0.35}[strength]
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    if not paragraphs:
+        paragraphs = [text]
+    result_paras = []
+    starters = _HUMANIZER_SENTENCE_STARTERS if is_formal else _HUMANIZER_SENTENCE_STARTERS_CASUAL
+    for para in paragraphs:
+        sentences = _humanize_split_sentences(para)
+        if len(sentences) <= 1:
+            result_paras.append(para)
+            continue
+        modified = list(sentences)
+        # Vary first sentence opener
+        if _random_chance(intensity):
+            first = modified[0]
+            # Don't replace if already a non-standard starter
+            first_three = ' '.join(first.split()[:3]).lower()
+            if not any(first_three.startswith(s.lower()[:5]) for s in starters):
+                opener = random.choice(starters)
+                modified[0] = opener + ' ' + first[0].lower() + first[1:]
+        # Vary one middle sentence starter
+        for i in range(1, len(modified) - 1):
+            if _random_chance(intensity * 0.5):
+                s = modified[i]
+                first_word = s.split()[0].lower() if s.split() else ''
+                if first_word in ('the', 'this', 'these', 'it', 'we', 'our', 'a', 'an'):
+                    opener = random.choice(starters)
+                    modified[i] = opener + ' ' + s[0].lower() + s[1:]
+        result_paras.append(' '.join(modified))
+    return '\n\n'.join(result_paras)
+
+
+def _humanize_colloquialisms(text: str, strength: int) -> str:
+    intensity = {1: 0.05, 2: 0.10, 3: 0.20, 4: 0.35, 5: 0.50}[strength]
+    result = text
+    for word, alts in _HUMANIZER_COLLOQUIAL_MAPPING.items():
+        if _random_chance(intensity):
+            def _replace(m):
+                return random.choice(alts)
+            result = re.sub(r'\b' + word + r'\b', _replace, result, flags=re.IGNORECASE)
+    return result
 
 
 def _humanize_punctuation_noise(text: str, strength: int) -> str:
@@ -1360,10 +1666,18 @@ def humanize_text(text: str, mode: str = "general", strength: int = 3, is_medica
     def _process_para(para: str) -> str:
         result = para
         result = _humanize_strip_ai_phrases(result, strength)
-        result = _humanize_swap_synonyms(result)
+        result = _humanize_swap_synonyms(result, is_formal=(mode == "general"))
+        if not is_noora:
+            result = _humanize_hedging(result, strength)
         result = _humanize_punctuation_noise(result, strength)
         if strength >= 2:
             result = _humanize_sentence_lengths(result, strength)
+        if strength >= 2:
+            result = _humanize_burstiness(result, strength)
+        if strength >= 2:
+            result = _humanize_sentence_starters(result, strength, is_formal=(mode == "general"))
+        if strength >= 3:
+            result = _humanize_colloquialisms(result, strength)
         if strength >= 3:
             result = _humanize_disrupt_flow(result, strength, is_formal=(mode == "general"))
         if strength >= 3:
