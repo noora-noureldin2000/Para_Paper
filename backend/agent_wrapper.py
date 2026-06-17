@@ -2141,23 +2141,27 @@ class AntigravityAgent:
         except Exception:
             return False
 
-    async def _call_ollama(self, prompt: str, temperature: float = 0.7) -> str:
-        """Send a prompt to Ollama and return the response text."""
+    async def _call_ollama(self, prompt: str, system_content: str, temperature: float = 0.7) -> str:
+        """Send a chat prompt to Ollama using the /api/chat endpoint with system message."""
         import httpx
         payload = {
             "model": self.ollama_model,
-            "prompt": prompt,
             "stream": False,
+            "keep_alive": "5m",
             "options": {
                 "temperature": temperature,
-                "num_predict": 2048,
-            }
+                "num_predict": 4096,
+            },
+            "messages": [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": prompt},
+            ],
         }
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(f"{self.ollama_base_url}/api/generate", json=payload)
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            resp = await client.post(f"{self.ollama_base_url}/api/chat", json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return data.get("response", "").strip()
+            return data.get("message", {}).get("content", "").strip()
         
     async def run(self, text: str, payload_type: str = "", strength: int = 3) -> dict:
         strength = max(1, min(5, strength))
@@ -2170,7 +2174,7 @@ class AntigravityAgent:
                     print(f"[AgentWrapper] Using Ollama model '{self.ollama_model}' for: {self.skill_filename}")
                     temperature = 0.3 + (strength - 1) * 0.15
                     prompt = self._build_prompt(text, payload_type, strength)
-                    response_text = await self._call_ollama(prompt, temperature)
+                    response_text = await self._call_ollama(prompt, self.skill_content, temperature)
                     return self._parse_response(response_text, payload_type)
                 else:
                     print(f"[AgentWrapper] Ollama model '{self.ollama_model}' not found or Ollama not running. Skipping.")

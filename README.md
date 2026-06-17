@@ -110,9 +110,14 @@ Pull a local model and set the environment variable:
 ```bash
 # Install Ollama from https://ollama.com/
 ollama pull llama3.2        # ~2 GB — good for paraphrasing & humanizing
-# or try smaller models:
+# or try smaller/faster models:
 ollama pull llama3.2:1b     # ~0.7 GB — faster but lower quality
+ollama pull phi3:mini       # ~2.2 GB — good speed/quality balance
 ```
+
+> **Speed notes**: Ollama runs on CPU by default. Larger models (3B+ params) may be slow without a GPU.
+> - On CPU: `llama3.2:1b` (~1 sec/response) vs `llama3.2` (~10-30 sec/response)
+> - For GPU acceleration, install [CUDA](https://developer.nvidia.com/cuda-downloads) or use Metal on macOS — Ollama detects it automatically.
 
 Then create `backend/.env`:
 
