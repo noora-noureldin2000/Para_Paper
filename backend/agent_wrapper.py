@@ -2117,61 +2117,102 @@ def _run_proofreading_phase2(text: str) -> dict:
 
 
 class AntigravityAgent:
-    """Wrapper that utilizes google-antigravity SDK if available, or direct Gemini API, or rules-based simulation."""
+    """Wrapper that utilizes google-antigravity SDK if available, or direct Gemini API,
+    or local Ollama (llama3.2 etc.), or rules-based simulation."""
     def __init__(self, skill_filename: str):
         self.skill_filename = skill_filename
         self.skill_content = get_skill_content(skill_filename)
         self.api_key = os.getenv("GEMINI_API_KEY")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "").strip() or ""
+        self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+        
+    async def _check_ollama(self) -> bool:
+        """Check if Ollama is reachable and the model exists."""
+        if not self.ollama_model:
+            return False
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{self.ollama_base_url}/api/tags")
+                if resp.status_code != 200:
+                    return False
+                models = resp.json().get("models", [])
+                return any(self.ollama_model in m.get("name", "") for m in models)
+        except Exception:
+            return False
+
+    async def _call_ollama(self, prompt: str, temperature: float = 0.7) -> str:
+        """Send a prompt to Ollama and return the response text."""
+        import httpx
+        payload = {
+            "model": self.ollama_model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": 2048,
+            }
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(f"{self.ollama_base_url}/api/generate", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("response", "").strip()
         
     async def run(self, text: str, payload_type: str = "", strength: int = 3) -> dict:
         strength = max(1, min(5, strength))
-        # Check if we should use local simulation (no API Key available)
-        if not self.api_key:
-            print(f"[AgentWrapper] No GEMINI_API_KEY. Running local rules-based simulation for: {self.skill_filename}")
-            return run_local_simulation(text, self.skill_filename, payload_type, strength)
-
-        # 1. Try to use google-antigravity SDK
-        try:
-            from google.antigravity import Agent, LocalAgentConfig
-            print(f"[AgentWrapper] Using google-antigravity SDK for: {self.skill_filename}")
+        
+        # 1. Try Ollama local model (e.g. llama3.2) — requires user to pull model first
+        if self.ollama_model:
+            try:
+                available = await self._check_ollama()
+                if available:
+                    print(f"[AgentWrapper] Using Ollama model '{self.ollama_model}' for: {self.skill_filename}")
+                    temperature = 0.3 + (strength - 1) * 0.15
+                    prompt = self._build_prompt(text, payload_type, strength)
+                    response_text = await self._call_ollama(prompt, temperature)
+                    return self._parse_response(response_text, payload_type)
+                else:
+                    print(f"[AgentWrapper] Ollama model '{self.ollama_model}' not found or Ollama not running. Skipping.")
+            except Exception as e:
+                print(f"[AgentWrapper] Ollama call failed ({str(e)}). Falling back...")
+        
+        # 2. Try Gemini API (requires GEMINI_API_KEY)
+        if self.api_key:
+            # 2a. google-antigravity SDK
+            try:
+                from google.antigravity import Agent, LocalAgentConfig
+                print(f"[AgentWrapper] Using google-antigravity SDK for: {self.skill_filename}")
+                config = LocalAgentConfig(system_instructions=self.skill_content)
+                async with Agent(config) as agent:
+                    prompt = self._build_prompt(text, payload_type, strength)
+                    response = await agent.chat(prompt)
+                    response_text = await response.text()
+                    return self._parse_response(response_text, payload_type)
+            except Exception as e:
+                print(f"[AgentWrapper] Google-antigravity SDK failed or not installed ({str(e)}). Falling back to direct Gemini API...")
             
-            config = LocalAgentConfig(
-                system_instructions=self.skill_content
-            )
-            
-            async with Agent(config) as agent:
+            # 2b. Direct Gemini API fallback
+            try:
+                import google.generativeai as genai
+                print(f"[AgentWrapper] Using google-generativeai SDK for: {self.skill_filename}")
+                genai.configure(api_key=self.api_key)
+                temperature = 0.3 + (strength - 1) * 0.15
+                model = genai.GenerativeModel(
+                    model_name="gemini-2.0-flash",
+                    system_instruction=self.skill_content,
+                    generation_config={"temperature": temperature, "top_p": 0.9}
+                )
                 prompt = self._build_prompt(text, payload_type, strength)
-                response = await agent.chat(prompt)
-                response_text = await response.text()
+                response = model.generate_content(prompt)
+                response_text = response.text
                 return self._parse_response(response_text, payload_type)
-        except Exception as e:
-            print(f"[AgentWrapper] Google-antigravity SDK failed or not installed ({str(e)}). Falling back to direct Gemini API...")
-            
-        # 2. Try direct Gemini API fallback
-        try:
-            import google.generativeai as genai
-            print(f"[AgentWrapper] Using google-generativeai SDK for: {self.skill_filename}")
-            genai.configure(api_key=self.api_key)
-            
-            # Map strength (1-5) to temperature (0.3-0.9)
-            temperature = 0.3 + (strength - 1) * 0.15
-            
-            model = genai.GenerativeModel(
-                model_name="gemini-2.0-flash",
-                system_instruction=self.skill_content,
-                generation_config={
-                    "temperature": temperature,
-                    "top_p": 0.9,
-                }
-            )
-            
-            prompt = self._build_prompt(text, payload_type, strength)
-            response = model.generate_content(prompt)
-            response_text = response.text
-            return self._parse_response(response_text, payload_type)
-        except Exception as e:
-            print(f"[AgentWrapper] Gemini API fallback failed ({str(e)}). Running local rules-based simulation.")
-            return run_local_simulation(text, self.skill_filename, payload_type, strength)
+            except Exception as e:
+                print(f"[AgentWrapper] Gemini API fallback failed ({str(e)}).")
+        
+        # 3. Rules-based simulation (always works, no dependencies)
+        print(f"[AgentWrapper] Running local rules-based simulation for: {self.skill_filename}")
+        return run_local_simulation(text, self.skill_filename, payload_type, strength)
 
     def _build_prompt(self, text: str, payload_type: str, strength: int = 3) -> str:
         if "academic_rewording" in self.skill_filename:

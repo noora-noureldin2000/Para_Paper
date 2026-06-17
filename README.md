@@ -12,9 +12,10 @@ An AI-powered writing assistant that provides **paraphrasing**, **humanizing** (
 
 ## Quick Start
 
-### Prerequisites
+## Prerequisites
 - Python 3.10+
 - Windows, macOS, or Linux
+- (Optional) [Ollama](https://ollama.com/) + a pulled model (e.g. `ollama pull llama3.2`) for local LLM-powered rewrites — see [Configuration](#configuration)
 
 ### Setup
 ```bash
@@ -96,13 +97,44 @@ Select a style: **Academic**, **Concise**, or **High-Impact**, and a strength (1
 
 ## Configuration
 
-Set a `GEMINI_API_KEY` in `backend/.env` to use the Gemini API for higher-quality rewrites:
+The backend tries backends in this order:
+
+1. **Ollama** (local) — if `OLLAMA_MODEL` is set and Ollama is running
+2. **Gemini API** — if `GEMINI_API_KEY` is set
+3. **Rules-based simulation** — always works, no dependencies
+
+### Option 1: Ollama (local, recommended for best quality)
+
+Pull a local model and set the environment variable:
+
+```bash
+# Install Ollama from https://ollama.com/
+ollama pull llama3.2        # ~2 GB — good for paraphrasing & humanizing
+# or try smaller models:
+ollama pull llama3.2:1b     # ~0.7 GB — faster but lower quality
+```
+
+Then create `backend/.env`:
+
+```
+OLLAMA_MODEL=llama3.2
+# Optional — defaults to http://localhost:11434
+# OLLAMA_BASE_URL=http://localhost:11434
+```
+
+The Ollama model provides LLM-quality rewrites for paraphrasing, humanizing, and proofreading — running 100% locally on your machine.
+
+### Option 2: Gemini API (cloud)
+
+Set a `GEMINI_API_KEY` in `backend/.env`:
 
 ```
 GEMINI_API_KEY=your_key_here
 ```
 
-Without the key, all features work locally using the rules-based simulation engine.
+### No configuration
+
+Without either option, all features work locally using the rules-based simulation engine.
 
 ## License
 
