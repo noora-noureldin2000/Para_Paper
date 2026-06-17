@@ -38,28 +38,397 @@ def get_skill_content(skill_filename: str) -> str:
             
     return content.strip()
 
-# Local simulation dictionary for dynamic text rewrites (fallback when no API key is present)
+# Master synonym map for Quillbot-strength paraphrasing
+# Each word maps to multiple alternatives per style, chosen randomly at rewrite time
 SIMULATION_DICTIONARY = {
-    "show": {"academic": "elucidate", "concise": "show", "impact": "demonstrate"},
-    "shows": {"academic": "reflects", "concise": "shows", "impact": "demonstrates"},
-    "showed": {"academic": "indicated", "concise": "showed", "impact": "proved"},
-    "good": {"academic": "substantive", "concise": "good", "impact": "exceptional"},
-    "very": {"academic": "substantially", "concise": "", "impact": "exceptionally"},
-    "important": {"academic": "pivotal", "concise": "key", "impact": "crucial"},
-    "study": {"academic": "investigation", "concise": "study", "impact": "breakthrough research"},
-    "result": {"academic": "empirical finding", "concise": "result", "impact": "breakthrough"},
-    "results": {"academic": "empirical findings", "concise": "results", "impact": "breakthroughs"},
-    "analyze": {"academic": "deconstruct", "concise": "check", "impact": "revolutionize"},
-    "make": {"academic": "synthesize", "concise": "make", "impact": "forge"},
-    "use": {"academic": "utilize", "concise": "use", "impact": "harness"},
-    "get": {"academic": "derive", "concise": "get", "impact": "acquire"},
-    "help": {"academic": "facilitate", "concise": "help", "impact": "empower"},
-    "change": {"academic": "modification", "concise": "change", "impact": "transformation"},
-    "find": {"academic": "uncover", "concise": "find", "impact": "discover"},
-    "investigates": {"academic": "examines", "concise": "", "impact": "probes"},
-    "investigated": {"academic": "examined", "concise": "", "impact": "probed"},
-    "investigating": {"academic": "examining", "concise": "", "impact": "probing"},
-    "investigation": {"academic": "systematic analysis", "concise": "inquiry", "impact": "comprehensive inquiry"}
+    "show": {"academic": ["elucidate", "illustrate", "delineate", "demonstrate"],
+             "concise": ["show"], "impact": ["demonstrate", "prove", "establish"]},
+    "shows": {"academic": ["reflects", "illustrates", "delineates", "demonstrates"],
+              "concise": ["shows"], "impact": ["demonstrates", "proves", "establishes"]},
+    "showed": {"academic": ["indicated", "illustrated", "delineated"],
+               "concise": ["showed"], "impact": ["proved", "established", "demonstrated"]},
+    "shown": {"academic": ["elucidated", "illustrated", "delineated"],
+              "concise": ["shown"], "impact": ["proved", "established", "demonstrated"]},
+    "demonstrate": {"academic": ["elucidate", "illustrate", "delineate"],
+                    "concise": ["show", "demonstrate"], "impact": ["prove", "establish", "exhibit"]},
+    "demonstrates": {"academic": ["elucidates", "illustrates", "delineates"],
+                     "concise": ["shows"], "impact": ["proves", "establishes", "exhibits"]},
+    "demonstrated": {"academic": ["elucidated", "illustrated", "delineated"],
+                     "concise": ["showed"], "impact": ["proved", "established", "exhibited"]},
+    "suggest": {"academic": ["propose", "posit", "contend", "postulate"],
+                "concise": ["suggest"], "impact": ["argue", "assert", "indicate"]},
+    "suggests": {"academic": ["proposes", "posits", "contends", "postulates"],
+                 "concise": ["suggests"], "impact": ["argues", "asserts", "indicates"]},
+    "suggested": {"academic": ["proposed", "posited", "contended", "postulated"],
+                  "concise": ["suggested"], "impact": ["argued", "asserted", "indicated"]},
+    "indicate": {"academic": ["denote", "signal", "suggest", "imply"],
+                 "concise": ["show"], "impact": ["reveal", "attest to", "point to"]},
+    "indicates": {"academic": ["denotes", "signals", "suggests", "implies"],
+                  "concise": ["shows"], "impact": ["reveals", "attests to", "points to"]},
+    "indicated": {"academic": ["denoted", "signaled", "suggested", "implied"],
+                  "concise": ["showed"], "impact": ["revealed", "attested to", "pointed to"]},
+    "reveal": {"academic": ["disclose", "uncover", "bring to light"],
+               "concise": ["show"], "impact": ["expose", "lay bare", "unearth"]},
+    "reveals": {"academic": ["discloses", "uncovers", "brings to light"],
+                "concise": ["shows"], "impact": ["exposes", "lays bare", "unearths"]},
+    "revealed": {"academic": ["disclosed", "uncovered"],
+                 "concise": ["showed"], "impact": ["exposed", "laid bare", "unearthed"]},
+    "prove": {"academic": ["substantiate", "corroborate", "validate", "verify"],
+              "concise": ["confirm", "prove"], "impact": ["establish", "affirm", "certify"]},
+    "proves": {"academic": ["substantiates", "corroborates", "validates"],
+               "concise": ["confirms"], "impact": ["establishes", "affirms", "certifies"]},
+    "proved": {"academic": ["substantiated", "corroborated", "validated"],
+               "concise": ["confirmed"], "impact": ["established", "affirmed", "certified"]},
+    "propose": {"academic": ["put forth", "advance", "set forth", "hypothesize"],
+                "concise": ["propose"], "impact": ["assert", "declare", "propound"]},
+    "proposes": {"academic": ["puts forth", "advances", "sets forth", "hypothesizes"],
+                 "concise": ["proposes"], "impact": ["asserts", "declares", "propounds"]},
+    "proposed": {"academic": ["put forth", "advanced", "set forth", "hypothesized"],
+                 "concise": ["proposed"], "impact": ["asserted", "declared", "propounded"]},
+    "examine": {"academic": ["scrutinize", "interrogate", "dissect", "inspect"],
+                "concise": ["check", "examine"], "impact": ["probe", "scrutinize", "interrogate"]},
+    "examines": {"academic": ["scrutinizes", "interrogates", "dissects"],
+                 "concise": ["checks"], "impact": ["probes", "scrutinizes", "interrogates"]},
+    "examined": {"academic": ["scrutinized", "interrogated", "dissected"],
+                 "concise": ["checked"], "impact": ["probed", "scrutinized", "interrogated"]},
+    "investigate": {"academic": ["probe", "inquire into", "look into"],
+                    "concise": ["investigate"], "impact": ["probe deeply", "delve into"]},
+    "investigates": {"academic": ["probes", "inquires into", "looks into"],
+                     "concise": [""], "impact": ["probes deeply", "delves into"]},
+    "investigated": {"academic": ["probed", "inquired into"],
+                     "concise": [""], "impact": ["probed deeply", "delved into"]},
+    "investigation": {"academic": ["systematic analysis", "thorough examination", "in-depth inquiry"],
+                      "concise": ["inquiry"], "impact": ["comprehensive inquiry", "detailed probe"]},
+    "analyze": {"academic": ["deconstruct", "parse", "appraise", "evaluate"],
+                "concise": ["check", "examine"], "impact": ["dissect", "interrogate", "break down"]},
+    "analyzes": {"academic": ["deconstructs", "parses", "appraises"],
+                 "concise": ["checks"], "impact": ["dissects", "interrogates", "breaks down"]},
+    "analyzed": {"academic": ["deconstructed", "parsed", "appraised"],
+                 "concise": ["checked"], "impact": ["dissected", "interrogated", "broke down"]},
+    "explore": {"academic": ["investigate", "probe", "navigate"],
+                "concise": ["explore"], "impact": ["push into", "pioneer"]},
+    "explores": {"academic": ["investigates", "probes", "navigates"],
+                 "concise": ["explores"], "impact": ["pushes into", "pioneers"]},
+    "identify": {"academic": ["pinpoint", "discern", "isolate", "ascertain"],
+                 "concise": ["find"], "impact": ["spot", "detect", "unmask"]},
+    "identifies": {"academic": ["pinpoints", "discerns", "isolates", "ascertains"],
+                   "concise": ["finds"], "impact": ["spots", "detects", "unmasks"]},
+    "identified": {"academic": ["pinpointed", "discerned", "isolated", "ascertained"],
+                   "concise": ["found"], "impact": ["spotted", "detected", "unmasked"]},
+    "provide": {"academic": ["furnish", "supply", "yield", "offer"],
+                "concise": ["give", "provide"], "impact": ["deliver", "supply", "furnish"]},
+    "provides": {"academic": ["furnishes", "supplies", "yields", "offers"],
+                 "concise": ["gives"], "impact": ["delivers", "supplies", "furnishes"]},
+    "provided": {"academic": ["furnished", "supplied", "yielded", "offered"],
+                 "concise": ["gave"], "impact": ["delivered", "supplied", "furnished"]},
+    "present": {"academic": ["set forth", "expound", "delineate"],
+                "concise": ["present", "show"], "impact": ["unveil", "showcase", "spotlight"]},
+    "presents": {"academic": ["sets forth", "expounds", "delineates"],
+                 "concise": ["shows"], "impact": ["unveils", "showcases", "spotlights"]},
+    "presented": {"academic": ["set forth", "expounded", "delineated"],
+                  "concise": ["showed"], "impact": ["unveiled", "showcased", "spotlighted"]},
+    "report": {"academic": ["document", "record", "chronicle"],
+               "concise": ["report"], "impact": ["announce", "proclaim", "disclose"]},
+    "reports": {"academic": ["documents", "records", "chronicles"],
+                "concise": ["reports"], "impact": ["announces", "proclaims", "discloses"]},
+    "reported": {"academic": ["documented", "recorded", "chronicled"],
+                 "concise": ["reported"], "impact": ["announced", "proclaimed", "disclosed"]},
+    "discuss": {"academic": ["expound on", "elaborate on", "deliberate over"],
+                "concise": ["discuss"], "impact": ["debate", "examine", "weigh"]},
+    "discusses": {"academic": ["expounds on", "elaborates on", "deliberates over"],
+                  "concise": ["discusses"], "impact": ["debates", "examines", "weighs"]},
+    "consider": {"academic": ["contemplate", "ponder", "deliberate", "reflect on"],
+                 "concise": ["consider"], "impact": ["weigh", "reckon with", "account for"]},
+    "considers": {"academic": ["contemplates", "ponders", "deliberates", "reflects on"],
+                  "concise": ["considers"], "impact": ["weighs", "reckons with", "accounts for"]},
+    "require": {"academic": ["necessitate", "demand", "entail"],
+                "concise": ["require", "need"], "impact": ["call for", "compel", "mandate"]},
+    "requires": {"academic": ["necessitates", "demands", "entails"],
+                 "concise": ["needs"], "impact": ["calls for", "compels", "mandates"]},
+    "support": {"academic": ["substantiate", "corroborate", "bolster", "uphold"],
+                "concise": ["support", "back"], "impact": ["champion", "reinforce", "fortify"]},
+    "supports": {"academic": ["substantiates", "corroborates", "bolsters"],
+                 "concise": ["backs"], "impact": ["champions", "reinforces", "fortifies"]},
+    "supported": {"academic": ["substantiated", "corroborated", "bolstered"],
+                  "concise": ["backed"], "impact": ["championed", "reinforced", "fortified"]},
+    "confirm": {"academic": ["corroborate", "verify", "validate", "authenticate"],
+                "concise": ["confirm"], "impact": ["affirm", "ratify", "certify"]},
+    "confirms": {"academic": ["corroborates", "verifies", "validates"],
+                 "concise": ["confirms"], "impact": ["affirms", "ratifies", "certifies"]},
+    "confirmed": {"academic": ["corroborated", "verified", "validated"],
+                  "concise": ["confirmed"], "impact": ["affirmed", "ratified", "certified"]},
+    "establish": {"academic": ["found", "institute", "set up"],
+                  "concise": ["create", "set up"], "impact": ["forge", "build", "lay the groundwork for"]},
+    "establishes": {"academic": ["founds", "institutes", "sets up"],
+                    "concise": ["creates"], "impact": ["forges", "builds", "lays the groundwork for"]},
+    "established": {"academic": ["founded", "instituted", "set up"],
+                    "concise": ["created"], "impact": ["forged", "built", "laid the groundwork for"]},
+    "contribute": {"academic": ["add to", "augment", "supplement"],
+                   "concise": ["contribute"], "impact": ["drive", "fuel", "advance"]},
+    "contributes": {"academic": ["adds to", "augments", "supplements"],
+                    "concise": ["contributes"], "impact": ["drives", "fuels", "advances"]},
+    "affect": {"academic": ["influence", "shape", "modulate", "govern"],
+               "concise": ["affect"], "impact": ["alter", "transform", "remake"]},
+    "affects": {"academic": ["influences", "shapes", "modulates", "governs"],
+                "concise": ["affects"], "impact": ["alters", "transforms", "remakes"]},
+    "conduct": {"academic": ["undertake", "carry out", "perform"],
+                "concise": ["conduct", "do"], "impact": ["pursue", "execute", "orchestrate"]},
+    "conducts": {"academic": ["undertakes", "carries out", "performs"],
+                 "concise": ["does"], "impact": ["pursues", "executes", "orchestrates"]},
+    "conducted": {"academic": ["undertook", "carried out", "performed"],
+                  "concise": ["did"], "impact": ["pursued", "executed", "orchestrated"]},
+    "develop": {"academic": ["formulate", "devise", "construct"],
+                "concise": ["build", "create"], "impact": ["engineer", "invent", "forge"]},
+    "develops": {"academic": ["formulates", "devises", "constructs"],
+                 "concise": ["builds", "creates"], "impact": ["engineers", "invents", "forges"]},
+    "developed": {"academic": ["formulated", "devised", "constructed"],
+                  "concise": ["built", "created"], "impact": ["engineered", "invented", "forged"]},
+    "create": {"academic": ["generate", "produce", "fashion", "craft"],
+               "concise": ["make", "create"], "impact": ["forge", "build", "construct"]},
+    "creates": {"academic": ["generates", "produces", "fashions", "crafts"],
+                "concise": ["makes"], "impact": ["forges", "builds", "constructs"]},
+    "created": {"academic": ["generated", "produced", "fashioned", "crafted"],
+                "concise": ["made"], "impact": ["forged", "built", "constructed"]},
+    "produce": {"academic": ["generate", "yield", "manufacture"],
+                "concise": ["make", "produce"], "impact": ["engineer", "turn out"]},
+    "produces": {"academic": ["generates", "yields", "manufactures"],
+                 "concise": ["makes"], "impact": ["engineers", "turns out"]},
+    "obtain": {"academic": ["acquire", "procure", "secure", "extract"],
+               "concise": ["get", "obtain"], "impact": ["gather", "collect", "capture"]},
+    "obtains": {"academic": ["acquires", "procures", "secures"],
+                "concise": ["gets"], "impact": ["gathers", "collects", "captures"]},
+    "obtained": {"academic": ["acquired", "procured", "secured"],
+                 "concise": ["got"], "impact": ["gathered", "collected", "captured"]},
+    "address": {"academic": ["tackle", "grapple with", "attend to"],
+                "concise": ["cover", "address"], "impact": ["confront", "take on"]},
+    "addresses": {"academic": ["tackles", "grapples with", "attends to"],
+                  "concise": ["covers"], "impact": ["confronts", "takes on"]},
+    "assess": {"academic": ["evaluate", "appraise", "gauge", "measure"],
+               "concise": ["check", "assess"], "impact": ["weigh", "judge", "size up"]},
+    "assesses": {"academic": ["evaluates", "appraises", "gauges"],
+                 "concise": ["checks"], "impact": ["weighs", "judges", "sizes up"]},
+    "assessed": {"academic": ["evaluated", "appraised", "gauged"],
+                 "concise": ["checked"], "impact": ["weighed", "judged", "sized up"]},
+    "improve": {"academic": ["enhance", "augment", "refine", "optimize"],
+                "concise": ["improve", "better"], "impact": ["elevate", "boost", "supercharge"]},
+    "improves": {"academic": ["enhances", "augments", "refines"],
+                 "concise": ["bettering"], "impact": ["elevates", "boosts", "supercharges"]},
+    "improved": {"academic": ["enhanced", "augmented", "refined"],
+                 "concise": ["bettered"], "impact": ["elevated", "boosted", "supercharged"]},
+    "increase": {"academic": ["augment", "expand", "amplify", "escalate"],
+                 "concise": ["raise", "increase"], "impact": ["surge", "skyrocket"]},
+    "increases": {"academic": ["augments", "expands", "amplifies"],
+                  "concise": ["raises"], "impact": ["surges", "skyrockets"]},
+    "increase_noun": {"academic": ["augmentation", "expansion", "amplification"],
+                      "concise": ["rise", "increase"], "impact": ["surge", "upsurge", "spike"]},
+    "reduce": {"academic": ["diminish", "curtail", "mitigate", "ameliorate"],
+               "concise": ["cut", "lower", "reduce"], "impact": ["slash", "pare down"]},
+    "reduces": {"academic": ["diminishes", "curtails", "mitigates"],
+                "concise": ["cuts", "lowers"], "impact": ["slashes", "pares down"]},
+    "reduce_noun": {"academic": ["diminution", "curtailment", "mitigation"],
+                    "concise": ["cut", "reduction"], "impact": ["slash", "downturn"]},
+    "focus": {"academic": ["concentrate on", "center on", "zero in on"],
+              "concise": ["focus"], "impact": ["zoom in on", "home in on"]},
+    "focuses": {"academic": ["concentrates on", "centers on", "zeros in on"],
+                "concise": ["focuses"], "impact": ["zooms in on", "homes in on"]},
+
+    # Nouns
+    "study": {"academic": ["investigation", "examination", "analysis", "exploration"],
+              "concise": ["study"], "impact": ["breakthrough research", "landmark study"]},
+    "studies": {"academic": ["investigations", "analyses", "explorations"],
+                "concise": ["studies"], "impact": ["vanguard research", "pioneering work"]},
+    "research": {"academic": ["scholarly inquiry", "academic investigation", "systematic study"],
+                 "concise": ["research"], "impact": ["cutting-edge work", "pioneering research"]},
+    "analysis": {"academic": ["deconstruction", "parsing", "appraisal", "evaluation"],
+                 "concise": ["analysis", "review"], "impact": ["deep dive", "dissection", "interrogation"]},
+    "approach": {"academic": ["methodology", "framework", "paradigm", "lens"],
+                 "concise": ["approach", "method"], "impact": ["strategy", "blueprint", "playbook"]},
+    "method": {"academic": ["methodology", "technique", "protocol", "procedure"],
+               "concise": ["method", "way"], "impact": ["approach", "system", "scheme"]},
+    "methodology": {"academic": ["analytical framework", "procedural framework", "research design"],
+                    "concise": ["method"], "impact": ["blueprint", "architectural plan"]},
+    "result": {"academic": ["empirical finding", "outcome", "observation", "finding"],
+               "concise": ["result", "finding"], "impact": ["breakthrough", "key outcome"]},
+    "results": {"academic": ["empirical findings", "outcomes", "observations"],
+                "concise": ["results", "findings"], "impact": ["breakthroughs", "key outcomes"]},
+    "finding": {"academic": ["discovery", "observation", "deduction"],
+                "concise": ["finding"], "impact": ["revelation", "breakthrough"]},
+    "findings": {"academic": ["discoveries", "observations", "deductions"],
+                 "concise": ["findings"], "impact": ["revelations", "breakthroughs"]},
+    "evidence": {"academic": ["empirical support", "substantiation", "corroboration"],
+                 "concise": ["evidence", "proof"], "impact": ["hard evidence", "conclusive proof"]},
+    "data": {"academic": ["empirical data", "quantitative observations", "measurements"],
+             "concise": ["data", "information"], "impact": ["raw intelligence", "empirical record"]},
+    "factor": {"academic": ["determinant", "parameter", "variable", "element"],
+               "concise": ["factor", "element"], "impact": ["driver", "catalyst", "lever"]},
+    "factors": {"academic": ["determinants", "parameters", "variables"],
+                "concise": ["factors", "elements"], "impact": ["drivers", "catalysts"]},
+    "variable": {"academic": ["parameter", "predictor", "covariate"],
+                 "concise": ["variable"], "impact": ["lever", "driver"]},
+    "effect": {"academic": ["impact", "influence", "ramification"],
+               "concise": ["effect", "result"], "impact": ["bearing", "repercussion", "aftermath"]},
+    "impact": {"academic": ["effect", "influence", "consequence"],
+               "concise": ["impact", "effect"], "impact": ["force", "weight", "clout"]},
+    "role": {"academic": ["function", "capacity", "position", "purview"],
+             "concise": ["role", "part"], "impact": ["part to play", "stake", "hand"]},
+    "context": {"academic": ["setting", "milieu", "backdrop", "frame"],
+                "concise": ["context", "setting"], "impact": ["arena", "sphere", "landscape"]},
+    "process": {"academic": ["procedure", "mechanism", "workflow", "pipeline"],
+                "concise": ["process", "steps"], "impact": ["engine", "machinery"]},
+    "mechanism": {"academic": ["apparatus", "instrumentality", "modus operandi"],
+                  "concise": ["mechanism", "means"], "impact": ["engine", "gear", "infrastructure"]},
+    "framework": {"academic": ["theoretical scaffold", "conceptual structure", "architectonic"],
+                  "concise": ["framework", "structure"], "impact": ["architecture", "skeleton"]},
+    "model": {"academic": ["theoretical construct", "conceptual model", "paradigm"],
+              "concise": ["model"], "impact": ["blueprint", "prototype", "template"]},
+    "system": {"academic": ["framework", "infrastructure", "apparatus"],
+               "concise": ["system"], "impact": ["machinery", "engine", "setup"]},
+    "feature": {"academic": ["attribute", "characteristic", "property", "trait"],
+                "concise": ["feature", "aspect"], "impact": ["hallmark", "trademark", "signature"]},
+    "characteristic": {"academic": ["attribute", "property", "trait", "quality"],
+                       "concise": ["trait", "feature"], "impact": ["hallmark", "earmark"]},
+    "hypothesis": {"academic": ["theoretical proposition", "conjecture", "postulate"],
+                   "concise": ["hypothesis", "theory"], "impact": ["thesis", "premise", "claim"]},
+    "theory": {"academic": ["theoretical framework", "conceptual model", "explanatory model"],
+               "concise": ["theory", "idea"], "impact": ["doctrine", "principle", "tenet"]},
+    "concept": {"academic": ["construct", "notion", "abstraction", "idea"],
+                "concise": ["concept", "idea"], "impact": ["pillar", "cornerstone", "linchpin"]},
+    "approach": {"academic": ["methodology", "framework", "paradigm", "lens"],
+                 "concise": ["approach", "method"], "impact": ["strategy", "blueprint", "playbook"]},
+    "application": {"academic": ["implementation", "deployment", "utilization"],
+                    "concise": ["use", "application"], "impact": ["deployment", "practical use"]},
+    "outcome": {"academic": ["result", "consequence", "end point", "deliverable"],
+                "concise": ["result", "outcome"], "impact": ["payoff", "yield", "upshot"]},
+    "implication": {"academic": ["ramification", "significance", "import"],
+                    "concise": ["meaning", "implication"], "impact": ["takeaway", "lesson", "upshot"]},
+    "limitation": {"academic": ["constraint", "shortcoming", "caveat", "drawback"],
+                   "concise": ["limit", "downside"], "impact": ["handicap", "weakness", "pitfall"]},
+    "contribution": {"academic": ["addition", "augmentation", "extension"],
+                     "concise": ["contribution"], "impact": ["breakthrough", "advancement"]},
+
+    # Adjectives
+    "important": {"academic": ["pivotal", "consequential", "significant", "paramount"],
+                  "concise": ["key", "important"], "impact": ["crucial", "vital", "momentous"]},
+    "significant": {"academic": ["notable", "marked", "appreciable", "considerable"],
+                    "concise": ["big", "important"], "impact": ["striking", "profound", "dramatic"]},
+    "crucial": {"academic": ["critical", "essential", "indispensable", "pivotal"],
+                "concise": ["key"], "impact": ["vital", "lifeblood", "make-or-break"]},
+    "critical": {"academic": ["pivotal", "pressing", "catch", "paramount"],
+                 "concise": ["key"], "impact": ["vital", "urgent", "do-or-die"]},
+    "key": {"academic": ["central", "core", "fundamental", "integral"],
+            "concise": ["key", "main"], "impact": ["linchpin", "cornerstone", "pivotal"]},
+    "essential": {"academic": ["indispensable", "requisite", "necessary", "compulsory"],
+                  "concise": ["needed", "essential"], "impact": ["vital", "fundamental"]},
+    "substantial": {"academic": ["considerable", "significant", "ample", "extensive"],
+                    "concise": ["big", "large"], "impact": ["massive", "sweeping", "far-reaching"]},
+    "innovative": {"academic": ["novel", "pioneering", "groundbreaking", "cutting-edge"],
+                   "concise": ["new", "fresh"], "impact": ["revolutionary", "visionary", "trailblazing"]},
+    "novel": {"academic": ["original", "unprecedented", "new"],
+              "concise": ["new"], "impact": ["revolutionary", "game-changing"]},
+    "new": {"academic": ["novel", "recent", "emerging", "nascent"],
+            "concise": ["new"], "impact": ["fresh", "cutting-edge", "groundbreaking"]},
+    "effective": {"academic": ["efficacious", "productive", "potent", "impactful"],
+                  "concise": ["effective", "useful"], "impact": ["powerful", "forceful", "dynamic"]},
+    "efficient": {"academic": ["streamlined", "optimized", "cost-effective"],
+                  "concise": ["efficient"], "impact": ["lean", "high-output", "productive"]},
+    "robust": {"academic": ["rigorous", "sound", "reliable", "well-grounded"],
+               "concise": ["strong", "solid"], "impact": ["resilient", "stalwart", "unshakeable"]},
+    "reliable": {"academic": ["dependable", "trustworthy", "reproducible"],
+                 "concise": ["reliable"], "impact": ["unfailing", "tried-and-true"]},
+    "accurate": {"academic": ["precise", "exact", "veridical", "error-free"],
+                 "concise": ["correct", "accurate"], "impact": ["spot-on", "dead-on"]},
+    "relevant": {"academic": ["pertinent", "germane", "applicable", "material"],
+                 "concise": ["relevant"], "impact": ["pressing", "consequential"]},
+    "potential": {"academic": ["latent", "possible", "underlying", "anticipated"],
+                  "concise": ["potential"], "impact": ["untapped", "dormant", "unrealized"]},
+    "clear": {"academic": ["evident", "apparent", "manifest", "unambiguous"],
+              "concise": ["clear"], "impact": ["crystal-clear", "obvious", "palpable"]},
+    "distinct": {"academic": ["discrete", "separate", "differentiated"],
+                 "concise": ["distinct", "clear"], "impact": ["well-defined", "sharp"]},
+    "unique": {"academic": ["singular", "one-of-a-kind", "distinctive"],
+               "concise": ["unique", "special"], "impact": ["unmatched", "unparalleled", "peerless"]},
+    "common": {"academic": ["prevalent", "widespread", "ubiquitous", "pervasive"],
+               "concise": ["common", "usual"], "impact": ["universal", "rampant", "epidemic"]},
+    "major": {"academic": ["significant", "leading", "foremost", "paramount"],
+              "concise": ["big", "major"], "impact": ["heavyweight", "dominant", "prevailing"]},
+    "primary": {"academic": ["principal", "dominant", "predominant", "chief"],
+                "concise": ["main", "primary"], "impact": ["driving", "central", "core"]},
+    "specific": {"academic": ["particular", "certain", "definite", "concrete"],
+                 "concise": ["specific", "exact"], "impact": ["precise", "well-defined"]},
+    "general": {"academic": ["overarching", "comprehensive", "broad-based"],
+                "concise": ["general"], "impact": ["blanket", "sweeping", "wide-ranging"]},
+    "complex": {"academic": ["intricate", "sophisticated", "multifaceted", "nuanced"],
+                "concise": ["hard", "complex"], "impact": ["knotty", "thorny", "convoluted"]},
+    "optimal": {"academic": ["ideal", "most favorable", "best possible"],
+                "concise": ["best", "optimal"], "impact": ["peak", "prime", "maximum"]},
+    "adequate": {"academic": ["satisfactory", "sufficient", "suitable"],
+                 "concise": ["enough", "adequate"], "impact": ["commensurate", "fitting"]},
+    "limited": {"academic": ["confined", "restricted", "bounded", "circumscribed"],
+                "concise": ["limited", "little"], "impact": ["cramped", "tight", "narrow"]},
+
+    # Adverbs
+    "significantly": {"academic": ["markedly", "considerably", "notably", "appreciably"],
+                      "concise": ["a lot", "much"], "impact": ["dramatically", "vastly", "immensely"]},
+    "importantly": {"academic": ["notably", "consequentially", "pivotally"],
+                    "concise": [""], "impact": ["vitally", "momentously"]},
+    "clearly": {"academic": ["evidently", "manifestly", "undeniably", "patently"],
+                "concise": ["clearly"], "impact": ["unquestionably", "indisputably", "plainly"]},
+    "typically": {"academic": ["commonly", "generally", "routinely", "customarily"],
+                  "concise": ["usually", "typically"], "impact": ["standardly", "characteristically"]},
+    "specifically": {"academic": ["particularly", "especially", "notably"],
+                     "concise": ["specifically"], "impact": ["exactly", "precisely"]},
+    "primarily": {"academic": ["mainly", "chiefly", "predominantly", "principally"],
+                  "concise": ["mainly", "mostly"], "impact": ["above all", "first and foremost"]},
+    "consequently": {"academic": ["accordingly", "thus", "therefore", "as a result"],
+                     "concise": ["so"], "impact": ["hence", "ergo", "thereupon"]},
+    "therefore": {"academic": ["consequently", "accordingly", "thus", "hence"],
+                  "concise": ["so"], "impact": ["ergo", "thereby", "as such"]},
+    "furthermore": {"academic": ["moreover", "additionally", "besides"],
+                    "concise": [""], "impact": ["what is more", "beyond that", "in addition"]},
+    "however": {"academic": ["nevertheless", "nonetheless", "yet", "still"],
+                "concise": ["but", "still"], "impact": ["that said", "even so", "be that as it may"]},
+    "similarly": {"academic": ["likewise", "correspondingly", "by the same token"],
+                  "concise": ["also"], "impact": ["in like manner", "analogously"]},
+    "consistently": {"academic": ["persistently", "regularly", "routinely"],
+                     "concise": ["always"], "impact": ["steadfastly", "unwaveringly"]},
+    "relatively": {"academic": ["comparatively", "moderately", "somewhat"],
+                   "concise": ["rather", "quite"], "impact": ["fairly", "reasonably"]},
+    "increasingly": {"academic": ["progressively", "growing", "ever more"],
+                     "concise": ["more and more"], "impact": ["exponentially", "by leaps and bounds"]},
+    "broadly": {"academic": ["widely", "extensively", "comprehensively"],
+                "concise": ["broadly"], "impact": ["across the board", "in broad strokes"]},
+
+    # Special: good/bad
+    "good": {"academic": ["substantive", "sound", "rigorous", "compelling"],
+             "concise": ["good"], "impact": ["exceptional", "outstanding", "superlative"]},
+    "better": {"academic": ["superior", "more refined", "enhanced"],
+               "concise": ["better"], "impact": ["improved", "elevated"]},
+    "best": {"academic": ["most favorable", "ideal", "optimal"],
+             "concise": ["best"], "impact": ["paramount", "foremost", "unrivaled"]},
+    "bad": {"academic": ["deficient", "suboptimal", "inadequate"],
+            "concise": ["bad"], "impact": ["poor", "flawed", "detrimental"]},
+    "worse": {"academic": ["more deficient", "less favorable"],
+              "concise": ["worse"], "impact": ["inferior", "poorer"]},
+    "new": {"academic": ["novel", "recent", "emerging", "nascent"],
+            "concise": ["new"], "impact": ["fresh", "groundbreaking", "cutting-edge"]},
+    "old": {"academic": ["prior", "previous", "established", "longstanding"],
+            "concise": ["old"], "impact": ["time-honored", "veteran"]},
+    "very": {"academic": ["substantially", "considerably", "markedly"],
+             "concise": [""], "impact": ["exceptionally", "extremely", "profoundly"]},
+    "make": {"academic": ["synthesize", "constitute", "compose", "form"],
+             "concise": ["make"], "impact": ["forge", "craft", "fashion"]},
+    "use": {"academic": ["utilize", "employ", "leverage", "deploy"],
+            "concise": ["use"], "impact": ["harness", "wield", "command"]},
+    "get": {"academic": ["derive", "extract", "obtain", "procure"],
+            "concise": ["get"], "impact": ["acquire", "attain", "secure"]},
+    "help": {"academic": ["facilitate", "aid", "expedite", "enable"],
+             "concise": ["help"], "impact": ["empower", "catalyze", "unlock"]},
+    "change": {"academic": ["modification", "alteration", "shift", "transformation"],
+               "concise": ["change"], "impact": ["transformation", "overhaul", "metamorphosis"]},
+    "find": {"academic": ["uncover", "detect", "discover", "ascertain"],
+             "concise": ["find"], "impact": ["discover", "unearth", "stumble upon"]},
+    "need": {"academic": ["necessitate", "demand", "warrant", "call for"],
+             "concise": ["need"], "impact": ["require", "compel", "cry out for"]}
 }
 
 _COMMON_WORDS = {
@@ -124,11 +493,15 @@ def medical_paraphrase(text: str, strength: int = 3) -> dict:
                         im_repl = im_repl.capitalize()
                     result.append(im_repl + punct if im_repl else w)
             elif clean_w in SIMULATION_DICTIONARY:
-                repl = SIMULATION_DICTIONARY[clean_w].get(style, "")
-                if repl:
-                    if w[0].isupper():
-                        repl = repl.capitalize()
-                    result.append(repl + punct)
+                options = SIMULATION_DICTIONARY[clean_w].get(style, [])
+                if options:
+                    repl = random.choice(options)
+                    if repl:
+                        if w[0].isupper():
+                            repl = repl.capitalize()
+                        result.append(repl + punct)
+                    else:
+                        result.append(w)
                 else:
                     result.append(w)
             else:
@@ -146,10 +519,6 @@ def medical_paraphrase(text: str, strength: int = 3) -> dict:
     im = _paraphrase(text, "impact", strength)
     im_sentences = _split_sentences(im)
     im_med = " ".join(_med_synonym_replace(s, "impact") for s in im_sentences)
-
-    if strength >= 3:
-        academic_prefixes = ["Notably, ", "Clinically, ", "In this context, ", "From a clinical perspective, "]
-        ac_med = random.choice(academic_prefixes) + ac_med[0].lower() + ac_med[1:]
 
     if strength >= 4:
         impact_prefixes = ["We demonstrate that ", "Our findings reveal that ", "This investigation establishes that "]
@@ -200,6 +569,9 @@ def _split_sentences(text: str) -> list:
 
 
 def _try_passive(sentence: str) -> str:
+    # Skip sentences with subordinating conjunctions that would break passive form
+    if re.search(r'\b(that|whether|if|because|although|while)\b', sentence, re.IGNORECASE):
+        return None
     m = re.search(
         r'\b(.+?)\s+(shows|showed|demonstrates|demonstrated|indicates|indicated|reveals|revealed|'
         r'suggests|suggested|proposes|proposed|highlights|highlighted|illustrates|illustrated)\s+(.+)',
@@ -302,19 +674,6 @@ def _try_split_sentence(sentence: str) -> str:
     return None
 
 
-def _try_merge_sentences(sentences: list, idx: int, style: str) -> str:
-    if idx >= len(sentences) - 1:
-        return None
-    a, b = sentences[idx], sentences[idx + 1]
-    if len(a.split()) + len(b.split()) > 35:
-        return None
-    b_low = b[0].lower()
-    connectors = {"academic": "; moreover, ", "concise": "; ", "impact": "; "}
-    if style == "academic" and len(b.split()) > 3:
-        return f"{a.rstrip('.')}{connectors[style]}{b_low}{b[1:]}"
-    return None
-
-
 def _try_nominalize(sentence: str) -> str:
     pairs = [
         (r'\b(we|this study|this paper|this work)\s+(investigate|examine|analyze|explore)\s+(.+)$',
@@ -350,42 +709,51 @@ def _try_that_to_infinitive(sentence: str) -> str:
 
 
 def _try_frontload(sentence: str) -> str:
+    if re.search(r'\b(that|whether|if)\b', sentence, re.IGNORECASE):
+        return None
+    # Skip passive constructions ("was given", "is shown", etc.)
+    if re.search(r'\b(is|was)\s+(?!\w+er\b)\w{3,}(ed|en|ted)\b', sentence, re.IGNORECASE):
+        return None
     m = re.search(r'\b(the|this)\s+(.+?)\s+(is|was|shows|demonstrates|indicates|reveals)\s+(.+)', sentence, re.IGNORECASE)
     if m:
         det = m.group(1)
         subj = m.group(2).strip()
         verb = m.group(3).lower()
-        rest = m.group(4).strip()
+        rest = m.group(4).strip().rstrip(".,;:!?")
         if verb in ("is", "was"):
-            new = f"{det.capitalize()} {subj} — {rest}"
+            new = f"{det.capitalize()} {subj} -- {rest}."
         else:
             obj = rest.split()[0] if rest.split() else ""
             remainder = " ".join(rest.split()[1:]) if len(rest.split()) > 1 else ""
-            new = f"{obj.capitalize()} {remainder} — {det} {subj} {verb}s"
-        if not new.endswith("."):
-            new += "."
+            verb_form = verb if verb.endswith('s') else verb + 's'
+            new = f"{obj.capitalize()} {remainder} -- {det} {subj} {verb_form}."
+        if sentence[0].isupper():
+            new = new[0].upper() + new[1:]
         return new
     return None
 
 
-def _apply_synonym_replacements(sentence: str, style: str) -> str:
+def _apply_synonym_replacements(sentence: str, style: str, density: float = 0.6) -> str:
     words = sentence.split()
     result = []
     for w in words:
         clean_w = re.sub(r"[^\w]", "", w).lower()
         punct = ""
-        if w.endswith((".", ",", ";", "!", "?")):
-            for p in [".", ",", ";", "!", "?"]:
-                if w.endswith(p):
-                    punct = p
-                    clean_w = w[:-len(p)].lower()
-                    break
-        if clean_w in SIMULATION_DICTIONARY:
-            repl = SIMULATION_DICTIONARY[clean_w].get(style, "")
-            if repl:
-                if w[0].isupper():
-                    repl = repl.capitalize()
-                result.append(repl + punct)
+        for p in [".", ",", ";", "!", "?"]:
+            if w.endswith(p):
+                punct = p
+                clean_w = w[:-len(p)].lower()
+                break
+        if clean_w in SIMULATION_DICTIONARY and random.random() < density:
+            options = SIMULATION_DICTIONARY[clean_w].get(style, [])
+            if options:
+                repl = random.choice(options)
+                if repl:
+                    if w[0].isupper():
+                        repl = repl.capitalize()
+                    result.append(repl + punct)
+                else:
+                    result.append(w)
             else:
                 result.append(w)
         else:
@@ -393,9 +761,136 @@ def _apply_synonym_replacements(sentence: str, style: str) -> str:
     return " ".join(result)
 
 
+def _try_adj_noun_swap(sentence: str) -> str:
+    m = re.search(r'\b(the|this|an?)\s+(\w+)\s+(\w+)\s+(is|was|shows|demonstrates|indicates|reveals|suggests)', sentence, re.IGNORECASE)
+    if m:
+        det = m.group(1)
+        adj = m.group(2)
+        noun = m.group(3)
+        verb = m.group(4)
+        if len(adj) >= 4 and len(noun) >= 4:
+            # "The innovative approach shows" -> "The approach of innovation shows"
+            nounized = adj + ("ity" if adj.endswith("ble") else ("tion" if adj.endswith("ive") else "ness"))
+            new = f"{det} {noun} of {nounized} {verb}"
+            rest = sentence[m.end():]
+            result = new + rest
+            if sentence[0].isupper():
+                result = result[0].upper() + result[1:]
+            return result
+    return None
+
+
+def _try_there_rewrite(sentence: str) -> str:
+    m = re.search(r'\b[Tt]here\s+(is|are|exists?|remain|arise)\s+(a|an|some|no|many|much|several)?\s*(.+?)\s+(that|which|who)\s+(.+)', sentence)
+    if m:
+        verb = m.group(1)
+        obj = m.group(3).strip()
+        rel = m.group(5).strip()
+        new = f"{obj.capitalize() if sentence[0].isupper() else obj} {rel}"
+        if not new.endswith("."):
+            new += "."
+        return new
+    m2 = re.search(r'\b[Tt]here\s+(is|are)\s+(no|not|neither)\s+(.+?)(\.|,\s+and)', sentence)
+    if m2:
+        obj = m2.group(3).strip()
+        new = f"{obj.capitalize()} {m2.group(2)} exist{s if m2.group(1)=='are' else ''}"
+        if not new.endswith("."):
+            new += "."
+        return new
+    return None
+
+
+def _try_adverb_displace(sentence: str) -> str:
+    adv_pattern = r'\b(clearly|evidently|notably|significantly|importantly|typically|generally|specifically|primarily|consequently|therefore|however|furthermore|moreover|similarly|consistently|broadly)\b'
+    m = re.search(r'^(' + adv_pattern + r'),?\s+(.+)', sentence, re.IGNORECASE)
+    if m:
+        adv = m.group(1)
+        rest = m.group(3)
+        new = f"{rest.rstrip('.')}, {adv.lower()}."
+        if sentence[0].isupper():
+            new = new[0].upper() + new[1:]
+        return new
+    # Move mid-sentence adverb to front
+    m2 = re.search(r'^(\w[\w\s]+?)\s+,\s*(' + adv_pattern + r')\s*,\s+(.+)', sentence, re.IGNORECASE)
+    if m2:
+        front = m2.group(1)
+        adv = m2.group(2)
+        rest = m2.group(4)
+        new = f"{adv.capitalize()}, {front.strip().lower()}, {rest}"
+        if not new.endswith("."):
+            new += "."
+        return new
+    return None
+
+
+def _try_negation_restructure(sentence: str) -> str:
+    pairs = [
+        (r'\bnot\s+(significant|important|crucial|critical|essential)\b', 'un\\1'),
+        (r'\bnot\s+(accurate|adequate|effective|efficient|reliable)\b', ('inaccurate', 'inadequate', 'ineffective', 'inefficient', 'unreliable')),
+        (r'\bnot\s+(clear|common|necessary|usual)\b', ('unclear', 'uncommon', 'unnecessary', 'unusual')),
+        (r'\bnot\s+(possible|likely|able)\b', ('impossible', 'unlikely', 'unable')),
+        (r'\black\s+of\b', 'absence of'),
+        (r'\bno\s+(evidence|support|indication|proof)\b', '\\1 is lacking'),
+    ]
+    for pattern, repl in pairs:
+        if isinstance(repl, str):
+            if re.search(pattern, sentence, re.IGNORECASE):
+                result = re.sub(pattern, repl, sentence, flags=re.IGNORECASE)
+                if result != sentence:
+                    return result
+        else:
+            m = re.search(pattern, sentence, re.IGNORECASE)
+            if m:
+                result = re.sub(pattern, random.choice(repl), sentence, flags=re.IGNORECASE)
+                if result != sentence:
+                    return result
+    return None
+
+
+def _try_preposition_front(sentence: str) -> str:
+    # Skip if already fronted or contains em-dash
+    if '--' in sentence:
+        return None
+    m = re.search(r'^(.+?)(\s+(in|at|on|for|with|by|through|via|under|over|across|within|among)\s+(?:the|a|an|this|these|those|our)?\s*(.+))$', sentence)
+    if m and len(m.group(1).split()) >= 4:
+        core = m.group(1).strip().rstrip(".,;:!?")
+        pp = m.group(2).strip().rstrip(".,;:!?")
+        new = f"{pp.capitalize()}, {core[0].lower()}{core[1:]}."
+        return new
+    return None
+
+
+def _try_compound_restructure(sentence: str) -> str:
+    m = re.search(r'^(.+?),?\s+and\s+(?:(?:hence|therefore|thus|consequently)\s+)?(.+)$', sentence, re.IGNORECASE)
+    if m and len(m.group(1).split()) >= 3 and len(m.group(2).split()) >= 3:
+        first = m.group(1).strip()
+        second = m.group(2).strip().rstrip(".")
+        # Both sides must contain a finite verb — avoid noun-phrase-only lists
+        first_verb = bool(re.search(r'\b(is|are|was|were|has|have|had|shows|showed|indicates|indicated|demonstrates|suggests)\b', first, re.IGNORECASE))
+        second_verb = bool(re.search(r'\b(is|are|was|were|has|have|had|shows|showed|indicates|indicated|demonstrates|suggests)\b', second, re.IGNORECASE))
+        if not first_verb or not second_verb:
+            return None
+        pattern = random.choice(['not_only', 'while', 'semicolon'])
+        if pattern == 'not_only':
+            new = f"Not only {first[0].lower() + first[1:]}, but also {second[0].lower() + second[1:]}."
+        elif pattern == 'while':
+            new = f"{second.capitalize()}, while {first[0].lower() + first[1:]}."
+        else:
+            new = f"{first.rstrip('.')}; {second[0].lower() + second[1:]}."
+        if sentence[0].isupper():
+            new = new[0].upper() + new[1:]
+        return new
+    return None
+
+
+
+
 _TRANSFORM_PIPELINES = {
-    "academic": [_try_passive, _try_reorder_clause, _try_nominalize, _try_that_to_infinitive],
-    "concise":  [_try_split_sentence],
+    "academic": [_try_passive, _try_reorder_clause, _try_nominalize, _try_that_to_infinitive,
+                 _try_adj_noun_swap, _try_there_rewrite, _try_negation_restructure],
+    "concise":  [_try_split_sentence, _try_there_rewrite, _try_negation_restructure],
+    "impact":   [_try_frontload, _try_reorder_clause, _try_passive, _try_adverb_displace,
+                 _try_preposition_front, _try_compound_restructure],
 }
 
 
@@ -404,83 +899,82 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
     if not sentences:
         return text
 
-    # 1. Apply synonym replacements first
-    replaced = [_apply_synonym_replacements(s, style) for s in sentences]
-
-    # 2. Apply structural transforms based on strength and style
-    dense = strength >= 3
-    very_dense = strength >= 4
-    max_dense = strength >= 5
-
+    density_map = {1: 0.3, 2: 0.5, 3: 0.65, 4: 0.8, 5: 0.9}
+    density = density_map.get(strength, 0.6)
     transformed = []
+    transforms = _TRANSFORM_PIPELINES.get(style, [])
 
-    for i, sent in enumerate(replaced):
+    for i, sent in enumerate(sentences):
         t = sent
 
-        # Try structural transforms in priority order
-        transforms = _TRANSFORM_PIPELINES.get(style, [])
+        # First pass: lighter synonym replacement (more for higher strength)
+        t = _apply_synonym_replacements(t, style, density=density)
 
-        if style == "academic":
-            if dense and len(sent.split()) > 6:
-                for fn in transforms[:2]:
-                    result = fn(t)
-                    if result:
-                        t = result
-                        break
-            if very_dense and len(sent.split()) > 8:
-                for fn in transforms[2:]:
-                    result = fn(t)
-                    if result:
-                        t = result
-                        break
-            if max_dense and len(sent.split()) > 10:
-                result = _try_nominalize(t)
+        # Second pass: structural transforms — try ALL, chain them
+        if strength >= 2:
+            wc = len(t.split())
+            for fn in transforms:
+                if wc < 5:
+                    break
+                result = fn(t)
                 if result:
                     t = result
+                    wc = len(t.split())
+                    # At higher strengths, allow up to 2-3 chained transforms
+                    if strength >= 4 and random.random() < 0.5:
+                        continue
+                    break
 
-        elif style == "concise":
-            if dense and len(sent.split()) > 8:
-                result = _try_split_sentence(t)
-                if result:
-                    t = result
-            fillers = r'\b(indeed|actually|basically|essentially|generally|importantly|interestingly|notably|particularly|significantly)\b'
+        # Third pass at high strength: extra synonym swap for variety
+        if strength >= 4:
+            t2 = _apply_synonym_replacements(t, style, density=0.3)
+            if t2 != t:
+                t = t2
+
+        # Concise mode: always strip fillers
+        if style == "concise":
+            fillers = r'\b(indeed|actually|basically|essentially|importantly|interestingly|notably|particularly)\b'
             t = re.sub(fillers, '', t, flags=re.IGNORECASE)
-
-        elif style == "impact":
-            if dense and len(sent.split()) > 6:
-                result = _try_frontload(t)
-                if result:
-                    t = result
-            if very_dense and len(sent.split()) > 8:
-                result = _try_reorder_clause(t)
-                if result:
-                    t = result
-            if max_dense and len(sent.split()) > 10:
-                result = _try_passive(t)
-                if result:
-                    t = result
 
         transformed.append(t)
 
-    # 3. Sentence merging (academic & impact) / splitting (concise)
-    if style in ("academic", "impact") and dense:
+    # Sentence merging (academic & impact)
+    if style in ("academic", "impact") and strength >= 2:
         merged = []
         skip = False
+        merge_prob = 0.2 * strength
         for i, s in enumerate(transformed):
             if skip:
                 skip = False
                 continue
-            if i < len(transformed) - 1 and len(s.split()) < 12 and len(transformed[i+1].split()) < 12:
-                result = _try_merge_sentences(transformed, i, style)
-                if result:
-                    merged.append(result)
-                    skip = True
-                    continue
+            if i < len(transformed) - 1 and len(s.split()) < 12 and len(transformed[i+1].split()) < 12 and random.random() < merge_prob:
+                a = s.rstrip(".")
+                b = transformed[i+1]
+                b_low = b[0].lower() if b else ""
+                connector = "; " if style == "academic" else "; "
+                if style == "academic" and strength >= 3:
+                    connector = "; moreover, "
+                merged.append(f"{a}{connector}{b_low}{b[1:]}")
+                skip = True
+                continue
             merged.append(s)
         transformed = merged
 
-    # 4. Variety: sentence-length alternation for academic style
-    if style == "academic" and very_dense and len(transformed) >= 3:
+    # Sentence splitting for concise at higher strength
+    if style == "concise" and strength >= 3:
+        split_prob = 0.15 * strength
+        split_result = []
+        for s in transformed:
+            if len(s.split()) > 15 and random.random() < split_prob:
+                parts = _try_split_sentence(s)
+                if parts:
+                    split_result.extend(pp.strip() for pp in parts.replace("..", ".").split(".") if pp.strip())
+                    continue
+            split_result.append(s)
+        transformed = split_result
+
+    # Academic: sentence-length alternation for rhythm
+    if style == "academic" and strength >= 4 and len(transformed) >= 3:
         varied = []
         for i, s in enumerate(transformed):
             if i % 3 == 1 and len(s.split()) > 8:
@@ -492,26 +986,441 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
             varied.append(s)
         transformed = varied
 
-    # 5. Style-specific prefixes/additions
     result = " ".join(transformed)
 
-    if style == "academic":
-        if dense and not any(result.startswith(t) for t in ("Notably,", "Consequently,", "Furthermore,", "Nevertheless,", "Interestingly,")):
-            transitions = ["Notably, ", "Consequently, ", "Furthermore, ", "Nevertheless, "]
-            idx = hash(text) % len(transitions)
-            result = transitions[idx] + result[0].lower() + result[1:]
+    # Academic prefix at strength 3+ (only if not already prefixed)
+    if style == "academic" and strength >= 3:
+        prefixes = ["Notably, ", "Consequently, ", "Furthermore, ", "Nevertheless, ", "Interestingly, "]
+        if not any(result.startswith(p) for p in prefixes + ["Clinically,", "In this context,", "From a clinical perspective,"]):
+            idx = hash(text + str(strength)) % len(prefixes)
+            result = prefixes[idx] + result[0].lower() + result[1:]
 
-    # Impact prefixes handled by _try_frontload in the structural pipeline
+    # Impact prefix at strength 4+ (only if not already prefixed)
+    if style == "impact" and strength >= 4:
+        iprefixes = ["Crucially, ", "Strikingly, ", "Remarkably, ", "Notably, "]
+        if not any(result.startswith(p) for p in iprefixes):
+            idx = hash(text + "impact" + str(strength)) % len(iprefixes)
+            result = iprefixes[idx] + result[0].lower() + result[1:]
 
     result = re.sub(r'\s+', ' ', result).strip()
+    # Fix "a important/an significant" grammar
+    result = re.sub(r'\ba\s+(important|essential|innovative|impressive|integral|intriguing)\b', r'an \1', result, flags=re.IGNORECASE)
+    result = re.sub(r'\ban\s+(significant|substantive|noticeable|big|simple|direct)\b', r'a \1', result, flags=re.IGNORECASE)
+    return result if result else text
 
-    # 6. Deduplication: ensure >30% word difference from original
-    orig_words = set(w.lower().strip(".,;:!?") for w in text.split())
-    new_words = set(w.lower().strip(".,;:!?") for w in result.split())
-    if orig_words and len(orig_words & new_words) / len(orig_words) > 0.85:
-        pass  # Accept anyway — still better than nothing
 
+# =====================================================================
+# Enhanced Humanizer Engine (inspired by StealthHumanizer, AI-Text-Humanizer-App, lynote/humanize-text)
+# =====================================================================
+
+_HUMANIZER_AI_PHRASES = [
+    (r'\bfurthermore\b', ['also', 'and', 'on top of that', 'plus']),
+    (r'\bmoreover\b', ['also', 'and', 'besides', "what's more"]),
+    (r'\badditionally\b', ['also', 'and', 'plus', 'on top of that']),
+    (r'\bconsequently\b', ['so', 'which means', 'as a result', 'because of that']),
+    (r'\bsignificantly\b', ['noticeably', 'considerably', 'to a meaningful extent']),
+    (r'\bsubstantially\b', ['considerably', 'to a large extent', 'markedly']),
+    (r'\bnotably\b', ['especially', 'worth noting', 'interestingly']),
+    (r'\bremarkably\b', ['surprisingly', 'strikingly', 'quite notably']),
+    (r'\bparticularly\b', ['especially', 'mainly', 'mostly']),
+    (r'\bessentially\b', ['fundamentally', 'at its core', 'in essence']),
+    (r'\bfundamentally\b', ['at its core', 'in essence', 'in principle']),
+    (r'\bultimately\b', ['in the end', 'in the final analysis', 'eventually']),
+    (r'\binherently\b', ['naturally', 'by its nature', 'built into it']),
+    (r'\butilize\b', ['use', 'make use of', 'employ']),
+    (r'\bfacilitate\b', ['help with', 'make easier', 'enable']),
+    (r'\bleverage\b', ['use', 'take advantage of', 'build on']),
+    (r'\boptimize\b', ['improve', 'make better', 'fine-tune']),
+    (r'\bimplement\b', ['set up', 'put in place', 'adopt']),
+    (r'\bcomprehensive\b', ['thorough', 'complete', 'full']),
+    (r'\binnovative\b', ['new', 'fresh', 'creative']),
+    (r'\btransformative\b', ['major', 'significant', 'far-reaching']),
+    (r'\bunprecedented\b', ['unmatched', 'completely new', 'novel']),
+    (r'\bstreamline\b', ['simplify', 'make smoother', 'improve']),
+    (r'\bcrucial\b', ['key', 'critical']),
+    (r'\bpivotal\b', ['key', 'important', 'central']),
+    (r'\bit is evident that\b', ['clearly', 'obviously']),
+    (r'\bit is clear that\b', ['clearly', 'obviously']),
+    (r'\bhas the potential to\b', ['could', 'might', 'may']),
+    (r'\bin conclusion\b', ['']),
+    (r'\bin summary\b', ['']),
+    (r'\bto summarize\b', ['']),
+    (r'\bdelves?\s+into\b', ['looks at', 'explores', 'investigates']),
+    (r'\blandscape\b', ['area', 'field', 'domain']),
+    (r'\bmultifaceted\b', ['complex', 'many-sided']),
+    (r'\bseamless(?:ly)?\b', ['smooth', 'natural', 'effortless']),
+    (r'\bnumerous\b', ['many', 'several', 'lots of']),
+    (r'\ba variety of\b', ['different', 'various', 'diverse']),
+    (r'\ba multitude of\b', ['many', 'numerous', 'countless']),
+    (r'\bin the realm of\b', ['in', 'within', 'regarding']),
+    (r'\bshowcase\b', ['show', 'display', 'highlight']),
+    (r'\brobust\b', ['strong', 'solid', 'reliable']),
+    (r'\bdynamic\b', ['active', 'changing', 'evolving']),
+    (r'\bempowers?\b', ['enables', 'allows', 'helps']),
+    (r'\brevolutionize\b', ['change', 'transform', 'overhaul']),
+    (r'\bcutting-edge\b', ['latest', 'advanced', 'modern']),
+    (r'\bstate-of-the-art\b', ['latest', 'most advanced']),
+    (r'\bgame-changer\b', ['major shift', 'big deal', 'turning point']),
+    (r'\bparadigm shift\b', ['major change', 'fundamental change']),
+    (r'\bit is important to note\b(?:\s+that)?', ['']),
+    (r'\bit is worth noting\b(?:\s+that)?', ['']),
+    (r'\bit is worth mentioning\b', ['']),
+    (r'\bplays?\s+a\s+(?:crucial|pivotal|key|vital)\s+role\b', ['is central to', 'matters in', 'is important for']),
+]
+
+_HUMANIZER_CONTRACTIONS = [
+    ("don't", "do not"), ("can't", "cannot"), ("won't", "will not"),
+    ("isn't", "is not"), ("aren't", "are not"), ("wasn't", "was not"),
+    ("weren't", "were not"), ("hasn't", "has not"), ("haven't", "have not"),
+    ("hadn't", "had not"), ("doesn't", "does not"), ("didn't", "did not"),
+    ("shouldn't", "should not"), ("wouldn't", "would not"), ("couldn't", "could not"),
+    ("I'm", "I am"), ("you're", "you are"), ("he's", "he is"),
+    ("she's", "she is"), ("it's", "it is"), ("we're", "we are"),
+    ("they're", "they are"), ("I've", "I have"), ("we've", "we have"),
+    ("they've", "they have"), ("I'll", "I will"), ("you'll", "you will"),
+    ("we'll", "we will"), ("they'll", "they will"), ("that's", "that is"),
+    ("there's", "there is"), ("here's", "here is"), ("let's", "let us"),
+]
+
+_HUMANIZER_FORMAL_INSERTIONS = [
+    '-- though this remains debated',
+    '-- at least in principle',
+    'which is worth considering.',
+    'notably.',
+    '-- a point worth emphasizing.',
+    'in practice.',
+]
+
+_HUMANIZER_RHETORICAL_QUESTIONS = [
+    'Why does this matter?',
+    'What are the implications?',
+    'How significant is this finding?',
+    'What does this tell us?',
+]
+
+
+def _random_chance(p: float) -> bool:
+    return random.random() < p
+
+
+def _humanize_split_sentences(text: str) -> list:
+    return [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+
+
+def _humanize_strip_ai_phrases(text: str, strength: int) -> str:
+    result = text
+    intensity = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}[strength]
+    for pattern, alternatives in _HUMANIZER_AI_PHRASES:
+        if _random_chance(intensity):
+            def _replacer(m):
+                alt = random.choice(alternatives) if alternatives[0] else ''
+                # Preserve trailing punctuation from original match
+                matched = m.group(0)
+                punct = ''
+                if matched and matched[-1] in ',.!?;:':
+                    punct = matched[-1]
+                return alt + punct
+            result = re.sub(pattern, _replacer, result, flags=re.IGNORECASE)
+    result = re.sub(r'\s+', ' ', result).strip()
+    # Remove leading orphaned punctuation only (from stripped AI transitions)
+    result = re.sub(r'^[,;:.\s]+', '', result)
+    # Deduplicate adjacent repeated words (e.g. "the the", "really really")
+    result = re.sub(r'\b(\w+)\s+\1\b', r'\1', result, flags=re.IGNORECASE)
     return result
+
+
+def _humanize_swap_synonyms(text: str) -> str:
+    safe_synonyms = {
+        'show': ['indicate', 'reveal', 'suggest'],
+        'shows': ['indicates', 'reveals', 'suggests'],
+        'showed': ['indicated', 'revealed', 'suggested'],
+        'use': ['apply', 'employ', 'utilize'],
+        'uses': ['applies', 'employs'],
+        'get': ['obtain', 'acquire', 'derive'],
+        'gets': ['obtains', 'acquires'],
+        'help': ['aid', 'assist', 'support'],
+        'helps': ['aids', 'assists'],
+        'big': ['large', 'major', 'substantial'],
+        'small': ['minor', 'limited', 'modest'],
+        'good': ['positive', 'favorable', 'beneficial'],
+        'bad': ['negative', 'adverse', 'unfavorable'],
+        'new': ['novel', 'recent', 'emerging'],
+        'old': ['prior', 'previous', 'established'],
+        'change': ['alter', 'modify', 'adjust'],
+        'changes': ['alters', 'modifies'],
+        'find': ['detect', 'identify', 'observe'],
+        'finds': ['detects', 'identifies'],
+        'give': ['provide', 'supply', 'offer'],
+        'gives': ['provides', 'offers'],
+        'make': ['produce', 'generate', 'create'],
+        'makes': ['produces', 'generates'],
+        'take': ['require', 'need', 'necessitate'],
+        'way': ['method', 'approach', 'means'],
+        'part': ['component', 'element', 'portion'],
+        'thing': ['aspect', 'factor', 'element'],
+        'often': ['frequently', 'commonly', 'regularly'],
+        'always': ['consistently', 'invariably', 'persistently'],
+        'maybe': ['perhaps', 'possibly', 'potentially'],
+        'very': ['quite', 'highly', 'extremely', 'notably'],
+    }
+    words = text.split()
+    result = []
+    for w in words:
+        clean = re.sub(r'[^a-zA-Z]', '', w)
+        punct = w[len(clean):] if len(clean) < len(w) else ''
+        if clean and clean.lower() in safe_synonyms and _random_chance(0.2):
+            alt = random.choice(safe_synonyms[clean.lower()])
+            if clean[0].isupper():
+                alt = alt.capitalize()
+            result.append(alt + punct)
+        else:
+            result.append(w)
+    return ' '.join(result)
+
+
+def _humanize_punctuation_noise(text: str, strength: int) -> str:
+    result = text
+    intensity = {1: 0.05, 2: 0.10, 3: 0.15, 4: 0.20, 5: 0.30}[strength]
+    if _random_chance(intensity):
+        match = list(re.finditer(r'\.\s+(?=[A-Z])', result))
+        if match and len(match) > 0:
+            m = random.choice(match)
+            before = result[:m.start()]
+            after = result[m.end():]
+            result = before + '; ' + after[0].lower() + after[1:]
+    if _random_chance(intensity * 0.5):
+        pair = random.choice(_HUMANIZER_CONTRACTIONS)
+        short, long = pair
+        if _random_chance(0.5):
+            result = re.sub(r'\b' + re.escape(long) + r'\b', short, result, flags=re.IGNORECASE)
+        else:
+            result = re.sub(r'\b' + re.escape(short) + r'\b', long, result, flags=re.IGNORECASE)
+    if _random_chance(0.1):
+        emdash = re.search(r'\s*[—–]\s*', result)
+        if emdash:
+            result = re.sub(r'(\d)\s*[–—]\s*(\d)', r'\1–\2', result)
+            result = re.sub(r'\s*[—–]\s*', ', ', result)
+    return result
+
+
+def _humanize_sentence_lengths(text: str, strength: int) -> str:
+    sent_intensity = {1: 0.1, 2: 0.15, 3: 0.20, 4: 0.30, 5: 0.40}[strength]
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    if not paragraphs:
+        paragraphs = [text]
+    result_paras = []
+    for para in paragraphs:
+        sentences = _humanize_split_sentences(para)
+        if len(sentences) <= 1:
+            result_paras.append(para)
+            continue
+        merged = []
+        i = 0
+        while i < len(sentences):
+            s = sentences[i]
+            wc = len(s.split())
+            if wc < 8 and i < len(sentences) - 1 and len(sentences[i+1].split()) < 8 and _random_chance(sent_intensity):
+                nxt = sentences[i+1].strip()
+                conj = random.choice(['and', 'but', 'while', 'whereas'])
+                merged_s = s.rstrip('.!?') + ', ' + conj + ' ' + nxt[0].lower() + nxt[1:]
+                merged.append(merged_s)
+                i += 2
+                continue
+            if wc > 30 and _random_chance(sent_intensity * 0.5):
+                break_patterns = [r',\s+(?:and|but|or|while)\s+', r',\s+(?:which|that|where)\s+', r',\s+(?:however|therefore)\s+']
+                for pat in break_patterns:
+                    match = re.search(pat, s)
+                    if match and match.start() > 10 and match.start() < len(s) - 10:
+                        first = s[:match.start()].rstrip(',').rstrip('.')
+                        second = s[match.end():]
+                        if second:
+                            merged.append(first + '.')
+                            merged.append(second[0].upper() + second[1:])
+                            break
+                else:
+                    merged.append(s)
+            else:
+                merged.append(s)
+            i += 1
+        result_paras.append(' '.join(merged))
+    return '\n\n'.join(result_paras)
+
+
+def _humanize_disrupt_flow(text: str, strength: int, is_formal: bool) -> str:
+    intensity = {1: 0.05, 2: 0.10, 3: 0.20, 4: 0.30, 5: 0.40}[strength]
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    if not paragraphs:
+        paragraphs = [text]
+    result = []
+    for p in paragraphs:
+        sentences = _humanize_split_sentences(p)
+        if len(sentences) < 2:
+            result.append(p)
+            continue
+        modified = list(sentences)
+        if is_formal:
+            if len(modified) >= 3 and _random_chance(intensity):
+                idx = 1 + random.randint(0, len(modified) - 2)
+                insertion = random.choice(_HUMANIZER_FORMAL_INSERTIONS)
+                while idx > 0 and insertion.split()[0].lower() == modified[idx-1].split()[0].lower() if modified[idx-1] else False:
+                    insertion = random.choice(_HUMANIZER_FORMAL_INSERTIONS)
+                modified.insert(idx, insertion.capitalize())
+            if len(modified) >= 2 and _random_chance(intensity * 0.5):
+                q = random.choice(_HUMANIZER_RHETORICAL_QUESTIONS)
+                while q.split()[0].lower() == (modified[-1].split()[0].lower() if modified[-1] else ''):
+                    q = random.choice(_HUMANIZER_RHETORICAL_QUESTIONS)
+                modified.append(q)
+        else:
+            if len(modified) >= 2 and _random_chance(intensity * 0.7):
+                conj = random.choice(['And ', 'But ', 'So ', 'Plus ', 'Well, '])
+                first_word = modified[0].split()[0].lower() if modified[0] else ''
+                # Avoid repeat first word (e.g. "And" then "and, ")
+                attempts = 0
+                while conj.lower().strip(', ') == first_word and attempts < 5:
+                    conj = random.choice(['And ', 'But ', 'So ', 'Plus ', 'Well, '])
+                    attempts += 1
+                modified.insert(0, conj + modified[0][0].lower() + modified[0][1:])
+            if len(modified) >= 2 and _random_chance(intensity * 0.4):
+                modified.append(random.choice(['Makes you wonder, right?', 'Sound familiar?', 'Interesting, isnt it?']))
+        result.append(' '.join(modified))
+    return '\n\n'.join(result)
+
+
+def _humanize_reorder_sentences(text: str, strength: int) -> str:
+    intensity = {1: 0.05, 2: 0.10, 3: 0.15, 4: 0.20, 5: 0.30}[strength]
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    if not paragraphs:
+        paragraphs = [text]
+    result = []
+    for p in paragraphs:
+        sentences = _humanize_split_sentences(p)
+        if len(sentences) <= 3:
+            result.append(p)
+            continue
+        middle = sentences[1:-1]
+        if len(middle) <= 1:
+            result.append(p)
+            continue
+        swap_count = max(1, int(len(middle) * intensity))
+        pronoun_re = re.compile(r'\b(he|she|it|they|this|that|these|those|his|her|its|their)\b', re.IGNORECASE)
+        for _ in range(swap_count):
+            i = random.randint(0, len(middle) - 1)
+            j = random.randint(0, len(middle) - 1)
+            if i == j:
+                continue
+            if pronoun_re.match(middle[i]) or pronoun_re.match(middle[j]):
+                if _random_chance(0.5):
+                    continue
+            middle[i], middle[j] = middle[j], middle[i]
+        result.append(' '.join([sentences[0]] + middle + [sentences[-1]]))
+    return '\n\n'.join(result)
+
+
+def _humanize_randomize_paragraphs(text: str, strength: int) -> str:
+    intensity = {1: 0.05, 2: 0.10, 3: 0.15, 4: 0.20, 5: 0.30}[strength]
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    if len(paragraphs) <= 1:
+        return text
+    result = []
+    i = 0
+    while i < len(paragraphs):
+        p = paragraphs[i]
+        sentences = _humanize_split_sentences(p)
+        if len(sentences) >= 4 and _random_chance(intensity):
+            split_at = 1 + random.randint(0, len(sentences) - 2)
+            result.append(' '.join(sentences[:split_at]))
+            result.append(' '.join(sentences[split_at:]))
+        elif i < len(paragraphs) - 1 and len(sentences) <= 2 and len(_humanize_split_sentences(paragraphs[i+1])) <= 2 and _random_chance(intensity):
+            result.append(p + ' ' + paragraphs[i+1])
+            i += 1
+        else:
+            result.append(p)
+        i += 1
+    return '\n\n'.join(result)
+
+
+def _humanize_readability_guard(original: str, processed: str) -> str:
+    orig_len = len(original.split())
+    proc_len = len(processed.split())
+    if abs(proc_len - orig_len) > orig_len * 0.5:
+        return original
+    return processed
+
+
+def humanize_text(text: str, mode: str = "general", strength: int = 3, is_medical: bool = False) -> str:
+    strength = max(1, min(5, strength))
+    is_noora = mode == "noora"
+    original = text
+
+    # Process each paragraph independently to preserve \n\n boundaries
+    paragraphs = [p for p in re.split(r'(\n\s*\n)', text) if p.strip()]
+    if not paragraphs:
+        paragraphs = [text]
+
+    def _process_para(para: str) -> str:
+        result = para
+        result = _humanize_strip_ai_phrases(result, strength)
+        result = _humanize_swap_synonyms(result)
+        result = _humanize_punctuation_noise(result, strength)
+        if strength >= 2:
+            result = _humanize_sentence_lengths(result, strength)
+        if strength >= 3:
+            result = _humanize_disrupt_flow(result, strength, is_formal=(mode == "general"))
+        if strength >= 3:
+            result = _humanize_reorder_sentences(result, strength)
+        # Phase 8: Dr. Noora style overlay (per paragraph)
+        if is_noora:
+            result = re.sub(r'\b(Therefore|Consequently|Eventually|Luckily|Also),\s*', r'\1 ', result)
+            result = re.sub(r"\((\w+)\s*=\s*(\w+)\)", r"( \1 = \2 )", result)
+            result = re.sub(r"in the study of\s+([\w\s\.]+et\s*al\.)", r"in \1 study", result, flags=re.IGNORECASE)
+            if not result.endswith(".") and len(result) > 5:
+                result += "."
+            med_replacements = {
+                "patients": "geriatric patients with comorbidities",
+                "medication": "potentially inappropriate medications (PIMs)",
+                "results": "biochemical measurements",
+            }
+            for orig, repl in med_replacements.items():
+                if _random_chance(0.5):
+                    result = result.replace(orig, repl)
+        # Medical-aware post-processing (preserve drug names, dosages)
+        if is_medical:
+            med_terms = load_medical_terms()
+            med_lower = {t.lower() for t in med_terms}
+            words = result.split()
+            preserved = []
+            for w in words:
+                clean = re.sub(r'[^a-zA-Z]', '', w).lower()
+                if clean in med_lower:
+                    preserved.append(w)
+                else:
+                    preserved.append(w)
+            result = ' '.join(preserved)
+        # Cleanup per paragraph
+        result = re.sub(r'\s+', ' ', result).strip()
+        result = re.sub(r',\s*,', ',', result)
+        result = re.sub(r'\s+,', ',', result)
+        result = re.sub(r'\.\s*\.', '.', result)
+        result = result.strip().strip(',').strip()
+        return result
+
+    processed_paras = [_process_para(p) for p in paragraphs]
+
+    # Rejoin with paragraph separators
+    result = []
+    for i, p in enumerate(processed_paras):
+        if p:
+            result.append(p)
+    result = '\n\n'.join(result)
+
+    # Phase 7: Paragraph structure randomization (at the full text level)
+    if strength >= 4:
+        result = _humanize_randomize_paragraphs(result, strength)
+
+    # Readability guard
+    result = _humanize_readability_guard(original, result)
+
+    return result if result else text
 
 
 def run_local_simulation(text: str, skill_name: str, payload_type: str = "", strength: int = 3) -> dict:
@@ -537,47 +1446,16 @@ def run_local_simulation(text: str, skill_name: str, payload_type: str = "", str
             ]
         }
         
-    # 2. Humanizer Simulation
+    # 2. Humanizer Simulation (enhanced with StealthHumanizer/AI-Text-Humanizer-App/lynote techniques)
     elif "humanizer" in skill_name:
         is_noora = "noora" in skill_name or payload_type == "noora"
-        
-        if is_noora:
-            # Dr. Noora's quirks: Omit commas after short transitions, citation adjectives, spaces inside brackets
-            transformed = text
-            transformed = clean_cliches(transformed)
-            # Replace common words with clinical terms
-            transformed = transformed.replace("patients", "geriatric patients with comorbidities")
-            transformed = transformed.replace("medication", "potentially inappropriate medications (PIMs)")
-            transformed = transformed.replace("results", "biochemical measurements")
-            
-            # Apply punctuation spacing quirk: (n=764) -> ( n = 764 )
-            transformed = re.sub(r"\((\w+)\s*=\s*(\w+)\)", r"( \1 = \2 )", transformed)
-            
-            # Omit commas after transitions
-            transformed = re.sub(r"\b(Therefore|Consequently|Eventually|Luckily|Also),\s*", r"\1 ", transformed)
-            
-            # Citation adjective: "in the study of Zhang et al." -> "in Zhang et al. study"
-            transformed = re.sub(r"in the study of\s+([\w\s\.]+et\s*al\.)", r"in \1 study", transformed, flags=re.IGNORECASE)
-            
-            # Ensure it ends with Dr. Noora style
-            if not transformed.endswith(".") and len(transformed) > 5:
-                transformed += "."
-                
-            return {
-                "status": "success",
-                "text": transformed
-            }
-        else:
-            # General humanizer: Clean clichés, replace copula, remove em dashes
-            transformed = text
-            transformed = clean_cliches(transformed)
-            transformed = transformed.replace("serves as", "is").replace("stands as", "is")
-            transformed = transformed.replace("—", ", ")
-            transformed = re.sub(r"\b(not only|but also)\b", "and", transformed, flags=re.IGNORECASE)
-            return {
-                "status": "success",
-                "text": transformed
-            }
+        is_medical = has_medical_terms(text)
+        mode = "noora" if is_noora else "general"
+        transformed = humanize_text(text, mode=mode, strength=strength, is_medical=is_medical)
+        return {
+            "status": "success",
+            "text": transformed
+        }
 
     # 3. Proofread Simulation (enhanced with paper-revision-editor patterns)
     elif "proofreading" in skill_name:

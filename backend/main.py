@@ -30,6 +30,7 @@ class TextPayload(BaseModel):
 class HumanizePayload(BaseModel):
     text: str
     mode: str = "noora"  # "noora" or "general"
+    strength: int = 3
 
 class ProofreadPayload(BaseModel):
     text: str
@@ -79,11 +80,11 @@ async def handle_humanize(payload: HumanizePayload):
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
             
-        print(f"[API] Humanize request received (mode: {payload.mode}). Text length: {len(payload.text)}")
+        print(f"[API] Humanize request received (mode: {payload.mode}, strength: {payload.strength}). Text length: {len(payload.text)}")
         if payload.mode == "noora":
-            result = await humanizer_noora_agent.run(payload.text, payload_type="noora")
+            result = await humanizer_noora_agent.run(payload.text, payload_type="noora", strength=payload.strength)
         else:
-            result = await humanizer_general_agent.run(payload.text, payload_type="general")
+            result = await humanizer_general_agent.run(payload.text, payload_type="general", strength=payload.strength)
         return result
     except Exception as e:
         print(f"[API] Humanize error: {str(e)}")

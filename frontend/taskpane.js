@@ -89,12 +89,21 @@ function setupEventListeners() {
     updateStatus("green", "Cleared");
   });
 
-  // Strength slider
+  // Strength slider for paraphrase
   const strengthSlider = document.getElementById("paraphraseStrength");
   const strengthValue = document.getElementById("paraphraseStrengthValue");
   if (strengthSlider) {
     strengthSlider.addEventListener("input", () => {
       strengthValue.textContent = STRENGTH_LABELS[strengthSlider.value] || `${strengthSlider.value} - Moderate`;
+    });
+  }
+
+  // Strength slider for humanize
+  const humanizeStrengthSlider = document.getElementById("humanizeStrength");
+  const humanizeStrengthValue = document.getElementById("humanizeStrengthValue");
+  if (humanizeStrengthSlider) {
+    humanizeStrengthSlider.addEventListener("input", () => {
+      humanizeStrengthValue.textContent = STRENGTH_LABELS[humanizeStrengthSlider.value] || `${humanizeStrengthSlider.value} - Moderate`;
     });
   }
 
@@ -157,6 +166,7 @@ function setupEventListeners() {
     if (!text) return;
 
     const selectedMode = document.querySelector('input[name="humanizeMode"]:checked').value;
+    const strength = parseInt(document.getElementById("humanizeStrength").value) || 3;
     updateStatus("orange", "Humanizing...");
     hideInfoBanner();
 
@@ -164,7 +174,7 @@ function setupEventListeners() {
       const response = await fetch(`${API_BASE_URL}/api/humanize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, mode: selectedMode })
+        body: JSON.stringify({ text, mode: selectedMode, strength })
       });
 
       if (!response.ok) {
