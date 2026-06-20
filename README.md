@@ -12,26 +12,23 @@ An AI-powered writing assistant that provides **paraphrasing**, **humanizing** (
 
 ## Quick Start
 
-## Prerequisites
+### Prerequisites
 - Python 3.10+
 - Windows, macOS, or Linux
 - (Optional) [Ollama](https://ollama.com/) + a pulled model (e.g. `ollama pull llama3.2`) for local LLM-powered rewrites — see [Configuration](#configuration)
 
 ### Setup
-```bash
-# Clone with submodules
-git clone --recurse-submodules https://github.com/YOUR_USER/Para_Paper.git
-cd Para_Paper
 
-# Install Python dependencies
-cd backend
-pip install -r requirements.txt
+```bash
+git clone https://github.com/YOUR_USER/Para_Paper.git
+cd Para_Paper
+pip install -r backend/requirements.txt
 ```
 
 ### Run
+
 ```bash
-cd backend
-python main.py
+python backend/main.py
 ```
 
 Open **http://localhost:8765** in your browser.
@@ -59,17 +56,14 @@ Para_Paper/
 │   ├── medical_vocab.py        # Medical term loader + synonym maps
 │   ├── academic_vocab.py       # AVL/MAWL academic vocabulary loader
 │   ├── english_words_loader.py # English dictionary loader
+│   ├── sop_engine.py           # Style/citation/number transforms
+│   ├── test_api_endpoints.py   # API endpoint tests
 │   ├── data/                   # Bundled lexical datasets
 │   │   ├── AVL.json            # Academic Vocabulary List (3K lemmas)
 │   │   └── MAWL.json           # Medical Academic Word List (623 words)
 │   ├── .agent/skills/          # Agent skill prompt files
-│   │   ├── academic_rewording.md
-│   │   ├── academic_rewording_medical.md
-│   │   ├── humanizer_noora.md
-│   │   ├── humanizer_general.md
-│   │   └── proofreading.md
 │   ├── .agent/proofreading_references/  # Reference guides
-│   ├── .env                    # API key (optional — works without)
+│   ├── .env                    # Optional API keys / Ollama config
 │   └── requirements.txt
 ├── frontend/                   # Web UI (served by backend)
 │   ├── index.html
@@ -78,6 +72,7 @@ Para_Paper/
 ├── wordlist-medicalterms-en/   # Medical word list (98K terms)
 ├── english-words/              # English dictionary (479K words)
 ├── guard-skills/               # Code-quality agent skills
+├── AGENTS.md                   # Agentic coding instructions
 ├── LICENSE
 └── README.md
 ```
@@ -99,42 +94,33 @@ Select a style: **Academic**, **Concise**, or **High-Impact**, and a strength (1
 
 The backend tries backends in this order:
 
-1. **Ollama** (local) — if `OLLAMA_MODEL` is set and Ollama is running
-2. **Gemini API** — if `GEMINI_API_KEY` is set
+1. **Gemini API** (cloud) — if `GEMINI_API_KEY` is set
+2. **Ollama** (local) — if `OLLAMA_MODEL` is set and Ollama is running
 3. **Rules-based simulation** — always works, no dependencies
 
-### Option 1: Ollama (local, recommended for best quality)
+### Option 1: Gemini API (cloud, recommended)
+
+Set your Gemini API key in `backend/.env`:
+
+```
+GEMINI_API_KEY=your_key_here
+```
+
+### Option 2: Ollama (local)
 
 Pull a local model and set the environment variable:
 
 ```bash
-# Install Ollama from https://ollama.com/
 ollama pull llama3.2        # ~2 GB — good for paraphrasing & humanizing
-# or try smaller/faster models:
 ollama pull llama3.2:1b     # ~0.7 GB — faster but lower quality
 ollama pull phi3:mini       # ~2.2 GB — good speed/quality balance
 ```
 
-> **Speed notes**: Ollama runs on CPU by default. Larger models (3B+ params) may be slow without a GPU.
-> - On CPU: `llama3.2:1b` (~1 sec/response) vs `llama3.2` (~10-30 sec/response)
-> - For GPU acceleration, install [CUDA](https://developer.nvidia.com/cuda-downloads) or use Metal on macOS — Ollama detects it automatically.
-
-Then create `backend/.env`:
+Create `backend/.env`:
 
 ```
 OLLAMA_MODEL=llama3.2
-# Optional — defaults to http://localhost:11434
 # OLLAMA_BASE_URL=http://localhost:11434
-```
-
-The Ollama model provides LLM-quality rewrites for paraphrasing, humanizing, and proofreading — running 100% locally on your machine.
-
-### Option 2: Gemini API (cloud)
-
-Set a `GEMINI_API_KEY` in `backend/.env`:
-
-```
-GEMINI_API_KEY=your_key_here
 ```
 
 ### No configuration

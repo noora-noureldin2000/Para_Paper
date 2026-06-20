@@ -1,22 +1,32 @@
 import os
+import sys
 import re
 import random
 from dotenv import load_dotenv
 from medical_vocab import load_medical_terms, MEDICAL_SYNONYMS, MEDICAL_ACADEMIC_PHRASES
-from english_words_loader import load_english_words
+from english_words_loader import get_english_lower
 from academic_vocab import load_avl, load_mawl, get_academic_score
+from sop_engine import apply_sop_transforms
 
 # Load environment variables (e.g. from .env file)
 load_dotenv()
 
-# Preload lexical resources
+# Preload lexical resources (lazy: English words loaded on first use)
 load_medical_terms()
-load_english_words()
 load_avl()
 load_mawl()
 
-# Skill Directory Path
-SKILLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".agent", "skills")
+# Pre-computed lowercase sets for has_medical_terms
+_MED_LOWER_CACHE = None
+_ENG_LOWER_CACHE = None
+
+# Skill Directory Path (supports PyInstaller bundled mode)
+def _get_base_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, 'backend')
+    return os.path.dirname(os.path.abspath(__file__))
+
+SKILLS_DIR = os.path.join(_get_base_dir(), ".agent", "skills")
 
 def get_skill_content(skill_filename: str) -> str:
     """Reads a skill markdown file and returns its instructions."""
@@ -30,7 +40,6 @@ def get_skill_content(skill_filename: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
     
-    # Strip YAML frontmatter if present
     if content.startswith("---"):
         parts = content.split("---", 2)
         if len(parts) >= 3:
@@ -449,19 +458,20 @@ _COMMON_WORDS = {
 }
 
 def has_medical_terms(text: str) -> bool:
+    global _MED_LOWER_CACHE, _ENG_LOWER_CACHE
     words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
     if not words:
         return False
-    med_terms = load_medical_terms()
-    med_lower = {t.lower() for t in med_terms}
-    eng_dict = load_english_words()
-    eng_lower = {w.lower() for w in eng_dict}
-    # Strong signal: a word that is in the medical list but NOT in the general English dictionary
-    # (e.g., drug names like "metformin")
+    if _MED_LOWER_CACHE is None:
+        med_terms = load_medical_terms()
+        _MED_LOWER_CACHE = {t.lower() for t in med_terms}
+    if _ENG_LOWER_CACHE is None:
+        _ENG_LOWER_CACHE = get_english_lower()
+    med_lower = _MED_LOWER_CACHE
+    eng_lower = _ENG_LOWER_CACHE
     med_specific = [w for w in words if w in med_lower and w not in eng_lower]
     if med_specific:
         return True
-    # Fallback: high density of general medical-academic terms
     match_count = sum(1 for w in words if w in med_lower and w not in _COMMON_WORDS)
     return match_count >= 8 and match_count / len(words) >= 0.3
 
@@ -471,7 +481,7 @@ def medical_paraphrase(text: str, strength: int = 3) -> dict:
         words = sentence.split()
         result = []
         for w in words:
-            clean_w = re.sub(r"[^\w]", "", w).lower()
+            clean_w = _WORD_CLEAN_RE.sub("", w).lower()
             punct = ""
             if w.endswith((".", ",", ";", "!", "?")):
                 for p in [".", ",", ";", "!", "?"]:
@@ -534,16 +544,6 @@ def medical_paraphrase(text: str, strength: int = 3) -> dict:
     }
 
 
-def clean_cliches(text: str) -> str:
-    cliches = ["delve", "testament", "tapestry", "beacon", "underscore", "pivotal", "crucial role in shaping", "it is important to note that"]
-    cleaned = text
-    for c in cliches:
-        cleaned = re.sub(rf"\b{c}\b", "show" if c == "underscore" else "", cleaned, flags=re.IGNORECASE)
-    return re.sub(r"\s+", " ", cleaned).strip()
-
-
-# ---- Structural Paraphrase Transforms (inspired by T5/PAWS) ----
-
 _ACADEMIC_VERB_MAP = {
     "shows": "shown", "showed": "shown", "demonstrates": "demonstrated", "demonstrated": "demonstrated",
     "indicates": "indicated", "indicated": "indicated", "reveals": "revealed", "revealed": "revealed",
@@ -558,25 +558,32 @@ _ACADEMIC_VERB_MAP = {
 _PASSIVE_TRIGGERS = {"shows", "demonstrates", "indicates", "reveals", "suggests", "proposes", "highlights",
                      "illustrates", "implies", "confirms", "establishes", "identifies"}
 
-_CLAUSE_CONNECTORS_BECAUSE = r'\b(because|since|as|due to the fact that)\b'
-_CLAUSE_CONNECTORS_ALTHOUGH = r'\b(although|though|while|whereas)\b'
-_CLAUSE_CONNECTORS_IF = r'\b(if|provided that|assuming)\b'
+_CLAUSE_CONNECTORS_BECAUSE = re.compile(r'\b(because|since|as|due to the fact that)\b', re.IGNORECASE)
+_CLAUSE_CONNECTORS_ALTHOUGH = re.compile(r'\b(although|though|while|whereas)\b', re.IGNORECASE)
+_CLAUSE_CONNECTORS_IF = re.compile(r'\b(if|provided that|assuming)\b', re.IGNORECASE)
+
+_SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?])\s+')
+_WORD_CLEAN_RE = re.compile(r"[^\w]")
+_PARAGRAPH_SPLIT_RE = re.compile(r'\n\s*\n')
 
 
 def _split_sentences(text: str) -> list:
-    raw = re.split(r'(?<=[.!?])\s+', text.strip())
+    raw = _SENTENCE_SPLIT_RE.split(text.strip())
     return [s.strip() for s in raw if s.strip()]
 
 
+_TRY_PASSIVE_SKIP_RE = re.compile(r'\b(that|whether|if|because|although|while)\b', re.IGNORECASE)
+_TRY_PASSIVE_MATCH_RE = re.compile(
+    r'\b(.+?)\s+(shows|showed|demonstrates|demonstrated|indicates|indicated|reveals|revealed|'
+    r'suggests|suggested|proposes|proposed|highlights|highlighted|illustrates|illustrated)\s+(.+)',
+    re.IGNORECASE
+)
+
+
 def _try_passive(sentence: str) -> str:
-    # Skip sentences with subordinating conjunctions that would break passive form
-    if re.search(r'\b(that|whether|if|because|although|while)\b', sentence, re.IGNORECASE):
+    if _TRY_PASSIVE_SKIP_RE.search(sentence):
         return None
-    m = re.search(
-        r'\b(.+?)\s+(shows|showed|demonstrates|demonstrated|indicates|indicated|reveals|revealed|'
-        r'suggests|suggested|proposes|proposed|highlights|highlighted|illustrates|illustrated)\s+(.+)',
-        sentence, re.IGNORECASE
-    )
+    m = _TRY_PASSIVE_MATCH_RE.search(sentence)
     if m:
         subj = m.group(1).strip()
         verb_base = m.group(2).lower()
@@ -624,13 +631,13 @@ def _try_reorder_clause(sentence: str) -> str:
             return new
         return None
 
-    m = re.search(_CLAUSE_CONNECTORS_BECAUSE, low)
+    m = _CLAUSE_CONNECTORS_BECAUSE.search(low)
     if m:
         alt_conn = {"because": "because", "since": "since", "as": "as", "due to the fact that": "because"}
         result = _reorder_with(sentence, m, alt_conn)
         if result:
             return result
-    m = re.search(_CLAUSE_CONNECTORS_ALTHOUGH, low)
+    m = _CLAUSE_CONNECTORS_ALTHOUGH.search(low)
     if m:
         conn = m.group(1)
         idx = low.index(conn)
@@ -737,7 +744,7 @@ def _apply_synonym_replacements(sentence: str, style: str, density: float = 0.6)
     words = sentence.split()
     result = []
     for w in words:
-        clean_w = re.sub(r"[^\w]", "", w).lower()
+        clean_w = _WORD_CLEAN_RE.sub("", w).lower()
         punct = ""
         for p in [".", ",", ";", "!", "?"]:
             if w.endswith(p):
@@ -907,10 +914,8 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
     for i, sent in enumerate(sentences):
         t = sent
 
-        # First pass: lighter synonym replacement (more for higher strength)
         t = _apply_synonym_replacements(t, style, density=density)
 
-        # Second pass: structural transforms — try ALL, chain them
         if strength >= 2:
             wc = len(t.split())
             for fn in transforms:
@@ -925,7 +930,6 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
                         continue
                     break
 
-        # Third pass at high strength: extra synonym swap for variety
         if strength >= 4:
             t2 = _apply_synonym_replacements(t, style, density=0.3)
             if t2 != t:
@@ -938,7 +942,7 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
 
         transformed.append(t)
 
-    # Sentence merging (academic & impact)
+    # Sentence merging (academic & impact) — uses comma+conjunction, not semicolons (SOP ban)
     if style in ("academic", "impact") and strength >= 2:
         merged = []
         skip = False
@@ -951,9 +955,9 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
                 a = s.rstrip(".")
                 b = transformed[i+1]
                 b_low = b[0].lower() if b else ""
-                connector = "; " if style == "academic" else "; "
+                connector = random.choice([", and ", ", while ", ", whereas "])
                 if style == "academic" and strength >= 3:
-                    connector = "; moreover, "
+                    connector = random.choice([", and further ", ", with ", ". Additionally, "])
                 merged.append(f"{a}{connector}{b_low}{b[1:]}")
                 skip = True
                 continue
@@ -988,19 +992,7 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
 
     result = " ".join(transformed)
 
-    # Academic prefix at strength 3+ (only if not already prefixed)
-    if style == "academic" and strength >= 3:
-        prefixes = ["Notably, ", "Consequently, ", "Furthermore, ", "Nevertheless, ", "Interestingly, "]
-        if not any(result.startswith(p) for p in prefixes + ["Clinically,", "In this context,", "From a clinical perspective,"]):
-            idx = hash(text + str(strength)) % len(prefixes)
-            result = prefixes[idx] + result[0].lower() + result[1:]
-
-    # Impact prefix at strength 4+ (only if not already prefixed)
-    if style == "impact" and strength >= 4:
-        iprefixes = ["Crucially, ", "Strikingly, ", "Remarkably, ", "Notably, "]
-        if not any(result.startswith(p) for p in iprefixes):
-            idx = hash(text + "impact" + str(strength)) % len(iprefixes)
-            result = iprefixes[idx] + result[0].lower() + result[1:]
+    result = apply_sop_transforms(result, strength=strength)
 
     result = re.sub(r'\s+', ' ', result).strip()
     # Fix "a important/an significant" grammar
@@ -1008,10 +1000,6 @@ def _paraphrase(text: str, style: str, strength: int) -> str:
     result = re.sub(r'\ban\s+(significant|substantive|noticeable|big|simple|direct)\b', r'a \1', result, flags=re.IGNORECASE)
     return result if result else text
 
-
-# =====================================================================
-# Enhanced Humanizer Engine (inspired by StealthHumanizer, AI-Text-Humanizer-App, lynote/humanize-text)
-# =====================================================================
 
 _HUMANIZER_AI_PHRASES = [
     # --- Transition words (replace with casual alternatives) ---
@@ -1175,6 +1163,10 @@ _HUMANIZER_AI_PHRASES = [
 ]
 
 # Total: 108 entries
+_HUMANIZER_AI_PHRASES_COMPILED = [
+    (re.compile(pattern, re.IGNORECASE), alts)
+    for pattern, alts in _HUMANIZER_AI_PHRASES
+]
 
 _HUMANIZER_CONTRACTIONS = [
     ("don't", "do not"), ("can't", "cannot"), ("won't", "will not"),
@@ -1224,27 +1216,24 @@ def _random_chance(p: float) -> bool:
 
 
 def _humanize_split_sentences(text: str) -> list:
-    return [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+    return [s.strip() for s in _SENTENCE_SPLIT_RE.split(text) if s.strip()]
 
 
 def _humanize_strip_ai_phrases(text: str, strength: int) -> str:
     result = text
     intensity = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}[strength]
-    for pattern, alternatives in _HUMANIZER_AI_PHRASES:
+    for pattern, alternatives in _HUMANIZER_AI_PHRASES_COMPILED:
         if _random_chance(intensity):
-            def _replacer(m):
-                alt = random.choice(alternatives) if alternatives[0] else ''
-                # Preserve trailing punctuation from original match
+            def _replacer(m, alts=alternatives):
+                alt = random.choice(alts) if alts[0] else ''
                 matched = m.group(0)
                 punct = ''
                 if matched and matched[-1] in ',.!?;:':
                     punct = matched[-1]
                 return alt + punct
-            result = re.sub(pattern, _replacer, result, flags=re.IGNORECASE)
+            result = pattern.sub(_replacer, result)
     result = re.sub(r'\s+', ' ', result).strip()
-    # Remove leading orphaned punctuation only (from stripped AI transitions)
     result = re.sub(r'^[,;:.\s]+', '', result)
-    # Deduplicate adjacent repeated words (e.g. "the the", "really really")
     result = re.sub(r'\b(\w+)\s+\1\b', r'\1', result, flags=re.IGNORECASE)
     return result
 
@@ -1254,7 +1243,7 @@ def _humanize_swap_synonyms(text: str, is_formal: bool = True) -> str:
     words = text.split()
     result = []
     for w in words:
-        clean = re.sub(r'[^a-zA-Z]', '', w)
+        clean = _WORD_CLEAN_RE.sub('', w)
         punct = w[len(clean):] if len(clean) < len(w) else ''
         if clean and clean.lower() in SIMULATION_DICTIONARY and _random_chance(0.25):
             entry = SIMULATION_DICTIONARY[clean.lower()]
@@ -1493,7 +1482,9 @@ def _humanize_punctuation_noise(text: str, strength: int) -> str:
             m = random.choice(match)
             before = result[:m.start()]
             after = result[m.end():]
-            result = before + '; ' + after[0].lower() + after[1:]
+            # SOP: semicolons forbidden — use comma+conjunction instead
+            conj = random.choice([', and ', ', but ', ', while '])
+            result = before + conj + after[0].lower() + after[1:]
     if _random_chance(intensity * 0.5):
         pair = random.choice(_HUMANIZER_CONTRACTIONS)
         short, long = pair
@@ -1682,7 +1673,6 @@ def humanize_text(text: str, mode: str = "general", strength: int = 3, is_medica
             result = _humanize_disrupt_flow(result, strength, is_formal=(mode == "general"))
         if strength >= 3:
             result = _humanize_reorder_sentences(result, strength)
-        # Phase 8: Dr. Noora style overlay (per paragraph)
         if is_noora:
             result = re.sub(r'\b(Therefore|Consequently|Eventually|Luckily|Also),\s*', r'\1 ', result)
             result = re.sub(r"\((\w+)\s*=\s*(\w+)\)", r"( \1 = \2 )", result)
@@ -1727,9 +1717,10 @@ def humanize_text(text: str, mode: str = "general", strength: int = 3, is_medica
             result.append(p)
     result = '\n\n'.join(result)
 
-    # Phase 7: Paragraph structure randomization (at the full text level)
     if strength >= 4:
         result = _humanize_randomize_paragraphs(result, strength)
+
+    result = apply_sop_transforms(result, strength=strength)
 
     # Readability guard
     result = _humanize_readability_guard(original, result)
@@ -1781,33 +1772,47 @@ def run_local_simulation(text: str, skill_name: str, payload_type: str = "", str
     return {"status": "error", "message": "Unknown skill"}
 
 
-# ---- Proofreading Phase 1 & 2 (enhanced with paper-revision-editor patterns) ----
-
-_BANNED_TRANSITIONS = {
+_BANNED_TRANSITIONS_LIST = [
     "furthermore", "moreover", "crucially", "importantly", "notably", "ultimately", "delving"
-}
+]
+_BANNED_TRANSITIONS_PATTERNS = [
+    re.compile(r'\b' + re.escape(t) + r'\b', re.IGNORECASE)
+    for t in _BANNED_TRANSITIONS_LIST
+]
 
-_BANNED_PROMOTIONAL = {
+_BANNED_PROMOTIONAL_LIST = [
     "novel", "interesting", "groundbreaking", "game-changing", "state-of-the-art"
-}
+]
+_BANNED_PROMOTIONAL_PATTERNS = [
+    re.compile(r'\b' + re.escape(p) + r'\b', re.IGNORECASE)
+    for p in _BANNED_PROMOTIONAL_LIST
+]
 
 _IMPORTANCE_VERBS_PATTERNS = [
-    r"\bunderscores\b", r"\bhighlights\b", r"\bshowcases\b",
-    r"\bplays\s+a\s+(key|central|crucial|vital|pivotal)\s+role\b"
+    re.compile(r"\bunderscores\b", re.IGNORECASE),
+    re.compile(r"\bhighlights\b", re.IGNORECASE),
+    re.compile(r"\bshowcases\b", re.IGNORECASE),
+    re.compile(r"\bplays\s+a\s+(key|central|crucial|vital|pivotal)\s+role\b", re.IGNORECASE),
 ]
 
 _INFLATED_NOUN_PHRASES = [
-    r"\bthe\s+landscape\s+of\b", r"\bthe\s+realm\s+of\b", r"\bthe\s+world\s+of\b",
-    r"\ba\s+myriad\s+of\b", r"\ba\s+plethora\s+of\b", r"\ba\s+wide\s+array\s+of\b",
-    r"\brich\s+tapestry\b", r"\bparadigm\s+shift\b", r"\bgame.?changer\b"
+    re.compile(r"\bthe\s+landscape\s+of\b", re.IGNORECASE),
+    re.compile(r"\bthe\s+realm\s+of\b", re.IGNORECASE),
+    re.compile(r"\bthe\s+world\s+of\b", re.IGNORECASE),
+    re.compile(r"\ba\s+myriad\s+of\b", re.IGNORECASE),
+    re.compile(r"\ba\s+plethora\s+of\b", re.IGNORECASE),
+    re.compile(r"\ba\s+wide\s+array\s+of\b", re.IGNORECASE),
+    re.compile(r"\brich\s+tapestry\b", re.IGNORECASE),
+    re.compile(r"\bparadigm\s+shift\b", re.IGNORECASE),
+    re.compile(r"\bgame.?changer\b", re.IGNORECASE),
 ]
 
 _TEMPLATE_SHAPES = [
-    (r"\bit\s+(is|'s)\s+(not\s+)?(just|merely|not\s+just)\s+about\b", "False-modesty antithesis template"),
-    (r"\bnot\s+only\s+.*\bbut\s+also\b", "'Not only...but also' template"),
-    (r"\bfirstly\b.*\bsecondly\b.*\bthirdly\b", "Firstly/Secondly/Thirdly list"),
-    (r"\bwe\s+show\s+that\b", "'We show that' frame (replace with claim)"),
-    (r"\bit\s+is\s+well\s+known\s+that\b", "'It is well known that' frame (cite or cut)"),
+    (re.compile(r"\bit\s+(is|'s)\s+(not\s+)?(just|merely|not\s+just)\s+about\b", re.IGNORECASE), "False-modesty antithesis template"),
+    (re.compile(r"\bnot\s+only\s+.*\bbut\s+also\b", re.IGNORECASE), "'Not only...but also' template"),
+    (re.compile(r"\bfirstly\b.*\bsecondly\b.*\bthirdly\b", re.IGNORECASE), "Firstly/Secondly/Thirdly list"),
+    (re.compile(r"\bwe\s+show\s+that\b", re.IGNORECASE), "'We show that' frame (replace with claim)"),
+    (re.compile(r"\bit\s+is\s+well\s+known\s+that\b", re.IGNORECASE), "'It is well known that' frame (cite or cut)"),
 ]
 
 def _detect_section_type(text: str) -> str:
@@ -1936,7 +1941,7 @@ def _run_proofreading_phase1(text: str) -> dict:
 
     # Banned transitions
     low_text = text.lower()
-    found_banned = [t for t in _BANNED_TRANSITIONS if re.search(r'\b' + re.escape(t) + r'\b', low_text)]
+    found_banned = [t for t, p in zip(_BANNED_TRANSITIONS_LIST, _BANNED_TRANSITIONS_PATTERNS) if p.search(low_text)]
     if found_banned:
         issue_id += 1
         issues.append({
@@ -1948,7 +1953,7 @@ def _run_proofreading_phase1(text: str) -> dict:
         })
 
     # Promotional adjectives
-    found_promo = [p for p in _BANNED_PROMOTIONAL if re.search(r'\b' + re.escape(p) + r'\b', low_text)]
+    found_promo = [p for p, pat in zip(_BANNED_PROMOTIONAL_LIST, _BANNED_PROMOTIONAL_PATTERNS) if pat.search(low_text)]
     if found_promo:
         issue_id += 1
         issues.append({
@@ -1961,7 +1966,7 @@ def _run_proofreading_phase1(text: str) -> dict:
 
     # Importance-signaling verbs
     for pattern in _IMPORTANCE_VERBS_PATTERNS:
-        if re.search(pattern, low_text):
+        if pattern.search(low_text):
             issue_id += 1
             issues.append({
                 "id": issue_id, "severity": "STYLE", "category": "AITells",
@@ -1974,7 +1979,7 @@ def _run_proofreading_phase1(text: str) -> dict:
 
     # Inflated noun phrases
     for pattern in _INFLATED_NOUN_PHRASES:
-        if re.search(pattern, low_text):
+        if pattern.search(low_text):
             issue_id += 1
             issues.append({
                 "id": issue_id, "severity": "STYLE", "category": "AITells",
@@ -1987,7 +1992,7 @@ def _run_proofreading_phase1(text: str) -> dict:
 
     # Template shapes
     for pattern, label in _TEMPLATE_SHAPES:
-        if re.search(pattern, low_text):
+        if pattern.search(low_text):
             issue_id += 1
             issues.append({
                 "id": issue_id, "severity": "STYLE", "category": "AITells",
@@ -2113,19 +2118,37 @@ def _run_proofreading_phase2(text: str) -> dict:
     return {"status": "success", "text": fixed_text}
 
 
-# ---- End Proofreading helper functions ----
 
 
 class AntigravityAgent:
-    """Wrapper that utilizes google-antigravity SDK if available, or direct Gemini API,
-    or local Ollama (llama3.2 etc.), or rules-based simulation."""
+    """Wrapper that tries Gemini API (cloud) first, then local Ollama,
+    then rules-based simulation as fallback."""
     def __init__(self, skill_filename: str):
         self.skill_filename = skill_filename
         self.skill_content = get_skill_content(skill_filename)
-        self.api_key = os.getenv("GEMINI_API_KEY")
-        self.ollama_model = os.getenv("OLLAMA_MODEL", "").strip() or ""
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2").strip()
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-        
+
+    async def _check_gemini(self) -> bool:
+        """Check if Gemini API key is configured."""
+        return bool(self.gemini_api_key)
+
+    async def _call_gemini(self, prompt: str, system_content: str, temperature: float = 0.7) -> str:
+        """Send a prompt to Gemini API using google-genai SDK."""
+        from google import genai
+        client = genai.Client(api_key=self.gemini_api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=system_content,
+                temperature=temperature,
+                max_output_tokens=4096,
+            )
+        )
+        return response.text.strip()
+
     async def _check_ollama(self) -> bool:
         """Check if Ollama is reachable and the model exists."""
         if not self.ollama_model:
@@ -2165,56 +2188,33 @@ class AntigravityAgent:
         
     async def run(self, text: str, payload_type: str = "", strength: int = 3) -> dict:
         strength = max(1, min(5, strength))
-        
-        # 1. Try Ollama local model (e.g. llama3.2) — requires user to pull model first
+        temperature = 0.3 + (strength - 1) * 0.15
+        prompt = self._build_prompt(text, payload_type, strength)
+
+        # 1. Try Gemini API (cloud) — primary backend
+        gemini_available = await self._check_gemini()
+        if gemini_available:
+            try:
+                print(f"[AgentWrapper] Using Gemini API for: {self.skill_filename}")
+                response_text = await self._call_gemini(prompt, self.skill_content, temperature)
+                return self._parse_response(response_text, payload_type)
+            except Exception as e:
+                print(f"[AgentWrapper] Gemini API call failed ({str(e)}). Falling back to Ollama.")
+
+        # 2. Try Ollama local model — secondary backend
         if self.ollama_model:
             try:
                 available = await self._check_ollama()
                 if available:
                     print(f"[AgentWrapper] Using Ollama model '{self.ollama_model}' for: {self.skill_filename}")
-                    temperature = 0.3 + (strength - 1) * 0.15
-                    prompt = self._build_prompt(text, payload_type, strength)
                     response_text = await self._call_ollama(prompt, self.skill_content, temperature)
                     return self._parse_response(response_text, payload_type)
                 else:
-                    print(f"[AgentWrapper] Ollama model '{self.ollama_model}' not found or Ollama not running. Skipping.")
+                    print(f"[AgentWrapper] Ollama model '{self.ollama_model}' not found or Ollama not running. Using rules engine.")
             except Exception as e:
-                print(f"[AgentWrapper] Ollama call failed ({str(e)}). Falling back...")
+                print(f"[AgentWrapper] Ollama call failed ({str(e)}). Falling back to rules engine.")
         
-        # 2. Try Gemini API (requires GEMINI_API_KEY)
-        if self.api_key:
-            # 2a. google-antigravity SDK
-            try:
-                from google.antigravity import Agent, LocalAgentConfig
-                print(f"[AgentWrapper] Using google-antigravity SDK for: {self.skill_filename}")
-                config = LocalAgentConfig(system_instructions=self.skill_content)
-                async with Agent(config) as agent:
-                    prompt = self._build_prompt(text, payload_type, strength)
-                    response = await agent.chat(prompt)
-                    response_text = await response.text()
-                    return self._parse_response(response_text, payload_type)
-            except Exception as e:
-                print(f"[AgentWrapper] Google-antigravity SDK failed or not installed ({str(e)}). Falling back to direct Gemini API...")
-            
-            # 2b. Direct Gemini API fallback
-            try:
-                import google.generativeai as genai
-                print(f"[AgentWrapper] Using google-generativeai SDK for: {self.skill_filename}")
-                genai.configure(api_key=self.api_key)
-                temperature = 0.3 + (strength - 1) * 0.15
-                model = genai.GenerativeModel(
-                    model_name="gemini-2.0-flash",
-                    system_instruction=self.skill_content,
-                    generation_config={"temperature": temperature, "top_p": 0.9}
-                )
-                prompt = self._build_prompt(text, payload_type, strength)
-                response = model.generate_content(prompt)
-                response_text = response.text
-                return self._parse_response(response_text, payload_type)
-            except Exception as e:
-                print(f"[AgentWrapper] Gemini API fallback failed ({str(e)}).")
-        
-        # 3. Rules-based simulation (always works, no dependencies)
+        # 3. Rules-based simulation (always works, no external dependencies)
         print(f"[AgentWrapper] Running local rules-based simulation for: {self.skill_filename}")
         return run_local_simulation(text, self.skill_filename, payload_type, strength)
 
@@ -2258,16 +2258,13 @@ class AntigravityAgent:
                     f"Text: \"{text}\""
                 )
             else:
-                # Phase 2
                 return f"Apply all corrections for the text. Output ONLY the corrected text:\n\"{text}\""
         return f"Process this text:\n\"{text}\""
 
     def _parse_response(self, response_text: str, payload_type: str) -> dict:
         response_text = response_text.strip()
         
-        # Clean JSON markdown syntax if present
         if response_text.startswith("```"):
-            # strip backticks and optional json identifier
             lines = response_text.splitlines()
             if lines[0].startswith("```"):
                 lines = lines[1:]
@@ -2288,7 +2285,6 @@ class AntigravityAgent:
                     ]
                 }
             except Exception:
-                # If JSON parse failed, split by keys
                 return {
                     "status": "success",
                     "options": [

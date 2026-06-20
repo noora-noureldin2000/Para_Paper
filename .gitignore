@@ -3,8 +3,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
-dist/
-build/
 *.egg
 .eggs/
 
@@ -35,6 +33,12 @@ desktop.ini
 # Bundled data files from external sources
 backend/data/
 
+# Build artifacts (we use Python backend + web frontend only)
+dist/
+build/
+*.spec
+*.bat
+
 # Cloned reference repos (sources, not active code)
 paraphrase-doctor/
 paper-revision-editor/
@@ -43,11 +47,6 @@ humanizer-Noora/
 proof-reading-skill/
 Paraphrasing sources/
 machine_readable_wordlists/
-
-
-# But keep the data repos needed at runtime
-# wordlist-medicalterms-en/   -- needed for medical_vocab.py
-# english-words/              -- needed for english_words_loader.py
 
 # ML model cache
 ~/.cache/huggingface/

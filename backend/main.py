@@ -1,6 +1,7 @@
 import os
+import sys
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -22,7 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request Models
 class TextPayload(BaseModel):
     text: str
     strength: int = 3
@@ -41,16 +41,14 @@ class MedicalParaphrasePayload(BaseModel):
     text: str
     strength: int = 3
 
-# Initialize Agents
 paraphrase_agent = AntigravityAgent("academic_rewording.md")
 paraphrase_medical_agent = AntigravityAgent("academic_rewording_medical.md")
 humanizer_noora_agent = AntigravityAgent("humanizer_noora.md")
 humanizer_general_agent = AntigravityAgent("humanizer_general.md")
 proofread_agent = AntigravityAgent("proofreading.md")
 
-# API Endpoints
 @app.post("/api/paraphrase")
-async def handle_paraphrase(payload: TextPayload):
+async def paraphrase_text(payload: TextPayload):
     try:
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
@@ -63,7 +61,7 @@ async def handle_paraphrase(payload: TextPayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/paraphrase/medical")
-async def handle_medical_paraphrase(payload: MedicalParaphrasePayload):
+async def paraphrase_medical(payload: MedicalParaphrasePayload):
     try:
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
@@ -75,7 +73,7 @@ async def handle_medical_paraphrase(payload: MedicalParaphrasePayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/humanize")
-async def handle_humanize(payload: HumanizePayload):
+async def humanize_text(payload: HumanizePayload):
     try:
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
@@ -91,7 +89,7 @@ async def handle_humanize(payload: HumanizePayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/proofread")
-async def handle_proofread(payload: ProofreadPayload):
+async def proofread_text(payload: ProofreadPayload):
     try:
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
@@ -99,24 +97,106 @@ async def handle_proofread(payload: ProofreadPayload):
         print(f"[API] Proofread request received (phase: {payload.phase}). Text length: {len(payload.text)}")
         
         if payload.phase == "detection":
-            # Phase 1: Detection
             result = await proofread_agent.run(payload.text, payload_type="phase1")
             return result
         else:
-            # Phase 2: Fix
             result = await proofread_agent.run(payload.text, payload_type="phase2")
             return result
     except Exception as e:
         print(f"[API] Proofread error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Health check endpoint
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "message": "Antigravity AI Backend is running securely"}
 
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Extract text from uploaded .docx, .pdf, or .txt files."""
+    try:
+        filename = file.filename or ""
+        ext = os.path.splitext(filename)[1].lower()
+        content = await file.read()
+
+        if ext == ".txt":
+            text = content.decode("utf-8", errors="replace")
+
+        elif ext == ".docx":
+            import io
+            from docx import Document
+            doc = Document(io.BytesIO(content))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            text = "\n\n".join(paragraphs)
+
+        elif ext == ".pdf":
+            import io
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            pages = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    pages.append(page_text)
+            text = "\n\n".join(pages)
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {ext}. Use .docx, .pdf, or .txt"
+            )
+
+        if not text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="No text could be extracted from the file."
+            )
+
+        print(f"[API] File upload: {filename} ({ext}), extracted {len(text)} chars")
+        return {"text": text, "filename": filename}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] File upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
+
+@app.get("/api/ollama-status")
+async def check_ollama_status():
+    """Check if Ollama is running and the configured model is available."""
+    model = os.getenv("OLLAMA_MODEL", "llama3.2").strip()
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+
+    if not model:
+        return {"available": False, "model": "", "reason": "No model configured"}
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url}/api/tags")
+            if resp.status_code != 200:
+                return {"available": False, "model": model, "reason": "Ollama not responding"}
+            models = resp.json().get("models", [])
+            found = any(model in m.get("name", "") for m in models)
+            if found:
+                return {"available": True, "model": model}
+            return {
+                "available": False,
+                "model": model,
+                "reason": f"Model '{model}' not found. Run: ollama pull {model}"
+            }
+    except Exception:
+        return {"available": False, "model": model, "reason": "Ollama not running"}
+
+
 # Serve static frontend files (index.html, taskpane.css, taskpane.js)
-frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+def _get_project_base_dir():
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+frontend_dir = os.path.join(_get_project_base_dir(), "frontend")
 if os.path.exists(frontend_dir):
     print(f"[API] Serving frontend from: {frontend_dir}")
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
@@ -127,7 +207,6 @@ if __name__ == "__main__":
     import uvicorn
     import socket
     
-    # Check if port is available
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     port = 8765
     result = sock.connect_ex(('127.0.0.1', port))
@@ -138,10 +217,5 @@ if __name__ == "__main__":
         print(f"[WARNING] Close that program or change the port in main.py.")
         print()
     
-    print("=" * 55)
-    print("  AI Writing Assistant Backend")
-    print("=" * 55)
-    print(f"  Server:  http://localhost:{port}")
-    print(f"  Open in your browser to start")
-    print("=" * 55)
+    print(f"Starting server at http://localhost:{port}")
     uvicorn.run("main:app", host="127.0.0.1", port=port, reload=False)

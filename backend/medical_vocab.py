@@ -1,6 +1,14 @@
 import os
+import sys
 
-MEDICAL_WORDLIST_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "wordlist-medicalterms-en", "wordlist.txt")
+
+def _get_base_dir():
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+MEDICAL_WORDLIST_PATH = os.path.join(_get_base_dir(), "wordlist-medicalterms-en", "wordlist.txt")
 
 _medical_terms: set = None
 _medical_lower: set = None
@@ -23,28 +31,6 @@ def load_medical_terms() -> set:
                 _medical_lower.add(term.lower())
     print(f"[MedicalVocab] Loaded {len(_medical_terms)} medical terms")
     return _medical_terms
-
-
-def is_medical_term(word: str) -> bool:
-    terms = load_medical_terms()
-    return word in terms or word.lower() in _medical_lower
-
-
-def find_medical_terms(text: str) -> list:
-    load_medical_terms()
-    found = []
-    words = text.split()
-    for w in words:
-        clean = w.strip(".,;:!?()[]{}'\"")
-        if clean and (clean in _medical_terms or clean.lower() in _medical_lower):
-            found.append(clean)
-    return found
-
-
-def get_medical_context_hint(terms: list) -> str:
-    if not terms:
-        return ""
-    return "The text contains medical terminology. Preserve clinical accuracy."
 
 
 MEDICAL_SYNONYMS = {

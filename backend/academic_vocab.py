@@ -1,10 +1,16 @@
 import os
+import sys
 import json
 
-AVL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "data", "AVL.json")
-MAWL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "data", "MAWL.json")
+
+def _get_base_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, 'backend')
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+AVL_PATH = os.path.join(_get_base_dir(), "data", "AVL.json")
+MAWL_PATH = os.path.join(_get_base_dir(), "data", "MAWL.json")
 
 _avl_set: set = None
 _mawl_set: set = None
@@ -50,16 +56,6 @@ def load_mawl() -> set:
     except Exception as e:
         print(f"[AcademicVocab] Error loading MAWL: {e}")
     return _mawl_set
-
-
-def is_academic_word(word: str) -> bool:
-    load_avl()
-    return word.lower() in _avl_set
-
-
-def is_medical_academic_word(word: str) -> bool:
-    load_mawl()
-    return word.lower() in _mawl_set
 
 
 def get_academic_score(text: str) -> float:

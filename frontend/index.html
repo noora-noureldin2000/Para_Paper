@@ -41,6 +41,24 @@
           Clear
         </button>
       </div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".docx,.pdf,.txt" hidden>
+        <div class="upload-placeholder" id="uploadPlaceholder">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="upload-text">Drop a file here or <strong>click to upload</strong></span>
+          <span class="upload-hint">.docx, .pdf, or .txt</span>
+        </div>
+        <div class="upload-file-badge hidden" id="uploadBadge">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="14 2 14 8 20 8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="badge-filename" id="uploadFilename"></span>
+          <button class="badge-remove" id="btnRemoveFile" title="Remove file">&times;</button>
+        </div>
+      </div>
       <textarea class="input-textarea" id="inputText" placeholder="Paste or type your text here to paraphrase, humanize, or proofread..."></textarea>
     </section>
 

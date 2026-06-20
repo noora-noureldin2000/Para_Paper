@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function initApp() {
   setupTabs();
   setupEventListeners();
+  checkOllamaStatus();
 }
 
 // Read text from textarea
@@ -322,6 +323,51 @@ function setupEventListeners() {
     document.getElementById("proofreadFixedContainer").classList.add("hidden");
     document.getElementById("proofreadResults").classList.remove("hidden");
   });
+
+  // ---- File Upload Handling ----
+  const uploadZone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+  const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+  const uploadBadge = document.getElementById('uploadBadge');
+  const uploadFilename = document.getElementById('uploadFilename');
+  const btnRemoveFile = document.getElementById('btnRemoveFile');
+
+  // Click to open file picker
+  uploadZone.addEventListener('click', (e) => {
+    if (e.target === btnRemoveFile || e.target.closest('.badge-remove')) return;
+    fileInput.click();
+  });
+
+  // Drag and drop
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('drag-over');
+  });
+  uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('drag-over');
+  });
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  });
+
+  // File input change
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+      handleFileUpload(fileInput.files[0]);
+    }
+  });
+
+  // Remove file badge
+  btnRemoveFile.addEventListener('click', (e) => {
+    e.stopPropagation();
+    uploadPlaceholder.classList.remove('hidden');
+    uploadBadge.classList.add('hidden');
+    fileInput.value = '';
+  });
 }
 
 // Status bar controller
@@ -358,4 +404,94 @@ function showInfoBanner(message, isError = true) {
 function hideInfoBanner() {
   const banner = document.getElementById("infoBanner");
   banner.classList.add("hidden");
+}
+
+// ---- File Upload ----
+async function handleFileUpload(file) {
+  const allowedExts = ['.docx', '.pdf', '.txt'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+  if (!allowedExts.includes(ext)) {
+    showInfoBanner('Unsupported file type. Please upload .docx, .pdf, or .txt files.', true);
+    return;
+  }
+
+  const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+  const uploadBadge = document.getElementById('uploadBadge');
+  const uploadFilename = document.getElementById('uploadFilename');
+
+  updateStatus('orange', 'Extracting text...');
+
+  // For .txt files, read directly in the browser
+  if (ext === '.txt') {
+    try {
+      const text = await file.text();
+      document.getElementById('inputText').value = text;
+      uploadPlaceholder.classList.add('hidden');
+      uploadBadge.classList.remove('hidden');
+      uploadFilename.textContent = file.name;
+      updateStatus('green', 'File loaded');
+    } catch (err) {
+      showInfoBanner('Failed to read text file.', true);
+      updateStatus('red', 'Upload failed');
+    }
+    return;
+  }
+
+  // For .docx and .pdf, send to backend
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.detail || 'Upload failed');
+    }
+
+    const data = await response.json();
+    document.getElementById('inputText').value = data.text;
+
+    uploadPlaceholder.classList.add('hidden');
+    uploadBadge.classList.remove('hidden');
+    uploadFilename.textContent = file.name;
+    updateStatus('green', 'File loaded');
+  } catch (error) {
+    console.error(error);
+    showInfoBanner('Failed to extract text from file. ' + error.message, true);
+    updateStatus('red', 'Upload failed');
+  }
+}
+
+// ---- Ollama Status Check ----
+async function checkOllamaStatus() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/ollama-status`);
+    if (!response.ok) return;
+    const data = await response.json();
+
+    // Remove any existing ollama banner
+    const existing = document.getElementById('ollamaBanner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'ollamaBanner';
+    banner.className = 'ollama-banner';
+
+    if (data.available) {
+      banner.classList.add('connected');
+      banner.innerHTML = `<span>\u2713 LLama 3.2 connected via Ollama \u2014 AI-powered mode active</span>`;
+    } else {
+      banner.innerHTML = `<span>\u26A0 Ollama not detected \u2014 using rules engine. For AI-powered mode, <a href="https://ollama.com/download" target="_blank">install Ollama</a> and run: <code>ollama pull llama3.2</code></span>`;
+    }
+
+    const header = document.querySelector('.header');
+    header.parentNode.insertBefore(banner, header.nextSibling);
+  } catch (e) {
+    // Server not ready yet, ignore
+  }
 }

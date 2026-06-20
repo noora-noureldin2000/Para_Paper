@@ -22,6 +22,7 @@ This project includes guard skills under `guard-skills/` that AI coding agents s
 - Python 3.10+ with FastAPI + uvicorn
 - Backend lives in `backend/`; frontend (static HTML/JS/CSS) in `frontend/`
 - All lexical resources are preloaded at module import time in `agent_wrapper.py`
-- The rules-based simulation engine (`run_local_simulation()`) is the primary execution path — Gemini API is optional fallback
+- Backend priority: **Gemini API** (cloud) → **Ollama** (local) → **rules-based simulation** (fallback)
 - Never bundle data files inside `backend/data/` without updating `.gitignore`
 - No hardcoded paths — use `os.path.join(os.path.dirname(os.path.abspath(__file__)), ...)`
+- No `.exe` builds — deliver as web app only (`python backend/main.py`)
