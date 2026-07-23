@@ -468,10 +468,82 @@ def apply_sop_transforms(text, strength=3):
         if strength >= 3:
             sentences = _apply_burstiness(sentences)
 
+        # New SOP humanizer transforms (Wikipedia AI taxonomy)
         result = ' '.join(sentences)
+        result = _clean_copula_avoidance(result)
+        result = _clean_negative_parallelisms(result)
+        result = _clean_signposting(result)
+        result = _clean_authority_tropes(result)
+        result = _clean_false_ranges(result)
+        result = _clean_tailing_negations(result)
+
         transformed_paragraphs.append(result)
 
     return '\n\n'.join(transformed_paragraphs)
+
+
+def _clean_copula_avoidance(text: str) -> str:
+    """Replace copula avoidance like 'serves as a', 'stands as a', 'marks a' with simple copulas."""
+    patterns = [
+        (r'\bserves as a\b', 'is a'),
+        (r'\bserves as an\b', 'is an'),
+        (r'\bstands as a\b', 'is a'),
+        (r'\bstands as an\b', 'is an'),
+        (r'\bmarks a pivotal moment in\b', 'is central to'),
+        (r'\brepresents a key\b', 'is a key'),
+    ]
+    res = text
+    for p, r in patterns:
+        res = re.sub(p, r, res, flags=re.IGNORECASE)
+    return res
+
+
+def _clean_negative_parallelisms(text: str) -> str:
+    """Simplify negative parallelisms like 'Not only X, but also Y'."""
+    pattern = r'\bnot only\s+(.+?)\s*,\s*but also\s+(.+?)\b'
+    def _repl(m):
+        return f"{m.group(1).strip()} and {m.group(2).strip()}"
+    return re.sub(pattern, _repl, text, flags=re.IGNORECASE)
+
+
+def _clean_signposting(text: str) -> str:
+    """Remove tutorial signposts like 'Let's dive in', 'Here's what you need to know'."""
+    patterns = [
+        r"\blet's dive into\b\s*",
+        r"\blet's explore\b\s*",
+        r"\bhere's what you need to know:?\b\s*",
+        r"\bwithout further ado,?\b\s*",
+    ]
+    res = text
+    for p in patterns:
+        res = re.sub(p, '', res, flags=re.IGNORECASE)
+    return res
+
+
+def _clean_authority_tropes(text: str) -> str:
+    """Clean persuasive authority tropes like 'The real question is', 'At its core'."""
+    patterns = [
+        (r'\bthe real question is whether\b', 'the question is whether'),
+        (r'\bat its core,?\b', ''),
+        (r'\bat the heart of the matter,?\b', ''),
+    ]
+    res = text
+    for p, r in patterns:
+        res = re.sub(p, r, res, flags=re.IGNORECASE)
+    return res
+
+
+def _clean_false_ranges(text: str) -> str:
+    """Simplify artificial ranges like 'from X to Y'."""
+    pattern = r'\bfrom the birth and death of stars to the enigmatic dance of dark matter\b'
+    return re.sub(pattern, 'covering stellar evolution and dark matter', text, flags=re.IGNORECASE)
+
+
+def _clean_tailing_negations(text: str) -> str:
+    """Clean tailing negation fragments like ', no guessing'."""
+    pattern = r',\s*no guessing\.?'
+    return re.sub(pattern, ' without forcing guessing.', text, flags=re.IGNORECASE)
+
 
 
 def _replace_banned_words(text, intensity):

@@ -19,10 +19,10 @@ This project includes guard skills under `guard-skills/` that AI coding agents s
 
 ## Project Conventions
 
-- Python 3.10+ with FastAPI + uvicorn
-- Backend lives in `backend/`; frontend (static HTML/JS/CSS) in `frontend/`
+- Python 3.10+ with Streamlit
+- Primary application entry point: `streamlit_app.py` (`streamlit run streamlit_app.py`)
+- All backend logic lives in `backend/`
 - All lexical resources are preloaded at module import time in `agent_wrapper.py`
-- Backend priority: **Gemini API** (cloud) → **Ollama** (local) → **rules-based simulation** (fallback)
-- Never bundle data files inside `backend/data/` without updating `.gitignore`
-- No hardcoded paths — use `os.path.join(os.path.dirname(os.path.abspath(__file__)), ...)`
-- No `.exe` builds — deliver as web app only (`python backend/main.py`)
+- Backend priority: **User Provider (Gemini / OpenRouter API)** → **Ollama (Optional Local)** → **Rules-based simulation (Fallback)**
+- API keys are session-only in Streamlit, never hardcoded or saved to disk
+- No `.exe` builds — deliver as web app only

@@ -2121,23 +2121,60 @@ def _run_proofreading_phase2(text: str) -> dict:
 
 
 class AntigravityAgent:
-    """Wrapper that tries Gemini API (cloud) first, then local Ollama,
-    then rules-based simulation as fallback."""
+    _active_provider = "gemini" # gemini, openrouter, ollama, rules
+    _openrouter_api_key = ""
+    _openrouter_model = "openrouter/auto"
+    _gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    _ollama_model = "llama3.2"
+    _ollama_base_url = "http://localhost:11434"
+
     def __init__(self, skill_filename: str):
         self.skill_filename = skill_filename
         self.skill_content = get_skill_content(skill_filename)
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2").strip()
-        self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+
+    @classmethod
+    def set_api_config(cls, provider: str = "gemini", api_key: str = "", model: str = "", base_url: str = ""):
+        cls._active_provider = provider.lower()
+        if provider == "gemini":
+            if api_key: cls._gemini_api_key = api_key.strip()
+        elif provider == "openrouter":
+            if api_key: cls._openrouter_api_key = api_key.strip()
+            if model: cls._openrouter_model = model.strip()
+        elif provider == "ollama":
+            if model: cls._ollama_model = model.strip()
+            if base_url: cls._ollama_base_url = base_url.rstrip("/")
+
+    async def _call_openrouter(self, prompt: str, system_content: str, temperature: float = 0.7) -> str:
+        import requests
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self._openrouter_api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:8501",
+            "X-Title": "Para Paper V2",
+        }
+        payload = {
+            "model": self._openrouter_model or "openrouter/auto",
+            "messages": [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": temperature,
+        }
+        res = requests.post(url, headers=headers, json=payload, timeout=120)
+        if res.status_code != 200:
+            raise RuntimeError(f"OpenRouter API error ({res.status_code}): {res.text}")
+        data = res.json()
+        return data["choices"][0]["message"]["content"].strip()
 
     async def _check_gemini(self) -> bool:
         """Check if Gemini API key is configured."""
-        return bool(self.gemini_api_key)
+        return bool(self._gemini_api_key)
 
     async def _call_gemini(self, prompt: str, system_content: str, temperature: float = 0.7) -> str:
         """Send a prompt to Gemini API using google-genai SDK."""
         from google import genai
-        client = genai.Client(api_key=self.gemini_api_key)
+        client = genai.Client(api_key=self._gemini_api_key)
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt,
@@ -2151,16 +2188,16 @@ class AntigravityAgent:
 
     async def _check_ollama(self) -> bool:
         """Check if Ollama is reachable and the model exists."""
-        if not self.ollama_model:
+        if not self._ollama_model:
             return False
         try:
             import httpx
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{self.ollama_base_url}/api/tags")
+                resp = await client.get(f"{self._ollama_base_url}/api/tags")
                 if resp.status_code != 200:
                     return False
                 models = resp.json().get("models", [])
-                return any(self.ollama_model in m.get("name", "") for m in models)
+                return any(self._ollama_model in m.get("name", "") for m in models)
         except Exception:
             return False
 
@@ -2168,7 +2205,7 @@ class AntigravityAgent:
         """Send a chat prompt to Ollama using the /api/chat endpoint with system message."""
         import httpx
         payload = {
-            "model": self.ollama_model,
+            "model": self._ollama_model,
             "stream": False,
             "keep_alive": "5m",
             "options": {
@@ -2181,39 +2218,64 @@ class AntigravityAgent:
             ],
         }
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(f"{self.ollama_base_url}/api/chat", json=payload)
+            resp = await client.post(f"{self._ollama_base_url}/api/chat", json=payload)
             resp.raise_for_status()
             data = resp.json()
             return data.get("message", {}).get("content", "").strip()
-        
+
     async def run(self, text: str, payload_type: str = "", strength: int = 3) -> dict:
         strength = max(1, min(5, strength))
         temperature = 0.3 + (strength - 1) * 0.15
         prompt = self._build_prompt(text, payload_type, strength)
 
-        # 1. Try Gemini API (cloud) — primary backend
-        gemini_available = await self._check_gemini()
-        if gemini_available:
+        # 1. Selected Provider execution
+        if self._active_provider == "openrouter" and self._openrouter_api_key:
+            try:
+                print(f"[AgentWrapper] Using OpenRouter API ({self._openrouter_model}) for: {self.skill_filename}")
+                response_text = await self._call_openrouter(prompt, self.skill_content, temperature)
+                return self._parse_response(response_text, payload_type)
+            except Exception as e:
+                print(f"[AgentWrapper] OpenRouter API failed ({e}), falling back...")
+
+        elif self._active_provider == "gemini" and self._gemini_api_key:
             try:
                 print(f"[AgentWrapper] Using Gemini API for: {self.skill_filename}")
                 response_text = await self._call_gemini(prompt, self.skill_content, temperature)
                 return self._parse_response(response_text, payload_type)
             except Exception as e:
-                print(f"[AgentWrapper] Gemini API call failed ({str(e)}). Falling back to Ollama.")
+                print(f"[AgentWrapper] Gemini API failed ({e}), falling back...")
 
-        # 2. Try Ollama local model — secondary backend
-        if self.ollama_model:
-            try:
-                available = await self._check_ollama()
-                if available:
-                    print(f"[AgentWrapper] Using Ollama model '{self.ollama_model}' for: {self.skill_filename}")
+        elif self._active_provider == "ollama":
+            if await self._check_ollama():
+                try:
+                    print(f"[AgentWrapper] Using Ollama local LLM ({self._ollama_model}) for: {self.skill_filename}")
                     response_text = await self._call_ollama(prompt, self.skill_content, temperature)
                     return self._parse_response(response_text, payload_type)
-                else:
-                    print(f"[AgentWrapper] Ollama model '{self.ollama_model}' not found or Ollama not running. Using rules engine.")
-            except Exception as e:
-                print(f"[AgentWrapper] Ollama call failed ({str(e)}). Falling back to rules engine.")
-        
+                except Exception as e:
+                    print(f"[AgentWrapper] Ollama failed ({e}), falling back...")
+
+        # 2. Automatic Fallback Chain (Gemini -> OpenRouter -> Ollama -> Rules)
+        if self._gemini_api_key:
+            try:
+                response_text = await self._call_gemini(prompt, self.skill_content, temperature)
+                return self._parse_response(response_text, payload_type)
+            except Exception:
+                pass
+
+        if self._openrouter_api_key:
+            try:
+                response_text = await self._call_openrouter(prompt, self.skill_content, temperature)
+                return self._parse_response(response_text, payload_type)
+            except Exception:
+                pass
+
+        if await self._check_ollama():
+            try:
+                response_text = await self._call_ollama(prompt, self.skill_content, temperature)
+                return self._parse_response(response_text, payload_type)
+            except Exception:
+                pass
+
         # 3. Rules-based simulation (always works, no external dependencies)
         print(f"[AgentWrapper] Running local rules-based simulation for: {self.skill_filename}")
         return run_local_simulation(text, self.skill_filename, payload_type, strength)
