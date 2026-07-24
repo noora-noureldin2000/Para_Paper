@@ -26,3 +26,9 @@ This project includes guard skills under `guard-skills/` that AI coding agents s
 - Backend priority: **User Provider (Gemini / OpenRouter API)** → **Ollama (Optional Local)** → **Rules-based simulation (Fallback)**
 - API keys are session-only in Streamlit, never hardcoded or saved to disk
 - No `.exe` builds — deliver as web app only
+
+### Streamlit UI rules
+
+- Widgets bind to `st.session_state` keys — never combine `value=` with `key=` on the same widget (keyed widgets ignore `value=` after first render → stale output bug)
+- Mutate widget-keyed state only inside `on_click` callbacks (callbacks run before the rerun, where such writes are legal)
+- Non-widget results live in plain session keys and render via `st.markdown` / `st.json` / `st.metric`
