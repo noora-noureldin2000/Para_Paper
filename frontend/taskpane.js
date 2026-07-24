@@ -1,18 +1,30 @@
 const API_BASE_URL = window.location.origin;
 
-if (window.location.protocol === 'file:') {
-  document.addEventListener("DOMContentLoaded", () => {
-    showInfoBanner("Opened directly from file system. Run the backend server first: cd backend && python main.py then open http://localhost:8765", true);
-  });
-}
-
 let activeSelection = "";
 
-document.addEventListener("DOMContentLoaded", initApp);
+// Robust initialization — works whether DOM is ready or still loading
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
 
 function initApp() {
-  setupTabs();
-  setupEventListeners();
+  try {
+    setupTabs();
+    setupEventListeners();
+    const statusEl = document.getElementById("statusText");
+    if (statusEl) {
+      statusEl.textContent = "JS Ready";
+    }
+    console.log("[AI Writer] Initialized successfully");
+  } catch (err) {
+    console.error("[AI Writer] Init error:", err);
+    const statusEl = document.getElementById("statusText");
+    if (statusEl) {
+      statusEl.textContent = "JS Error: " + err.message;
+    }
+  }
 }
 
 function getInputText() {
@@ -126,6 +138,7 @@ function setupEventListeners() {
 
   // ---- 1. Paraphrase ----
   document.getElementById("btnRunParaphrase").addEventListener("click", async () => {
+    console.log("[AI Writer] Paraphrase clicked");
     const text = getInputText();
     if (!text) return;
     const strength = parseInt(document.getElementById("paraphraseStrength").value, 10);
@@ -134,26 +147,36 @@ function setupEventListeners() {
     updateStatus("orange", "Paraphrasing...");
     hideInfoBanner();
     try {
+      console.log("[AI Writer] Fetching:", apiEndpoint);
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, strength })
       });
+      console.log("[AI Writer] Response status:", response.status);
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || "Server error");
       }
       const data = await response.json();
+      console.log("[AI Writer] Data received:", data);
       const options = data.options;
-      document.getElementById("para-academic-text").textContent = options.find(o => o.type === "Academic")?.text || "";
-      document.getElementById("para-concise-text").textContent = options.find(o => o.type === "Concise")?.text || "";
-      document.getElementById("para-impact-text").textContent = options.find(o => o.type === "High-Impact")?.text || "";
-      document.getElementById("paraphraseResults").classList.remove("hidden");
+      if (!options) throw new Error("No options in response");
+      const acadEl = document.getElementById("para-academic-text");
+      const concEl = document.getElementById("para-concise-text");
+      const impEl = document.getElementById("para-impact-text");
+      const resEl = document.getElementById("paraphraseResults");
+      if (!acadEl || !concEl || !impEl || !resEl) throw new Error("DOM elements not found");
+      acadEl.textContent = options.find(o => o.type === "Academic")?.text || "";
+      concEl.textContent = options.find(o => o.type === "Concise")?.text || "";
+      impEl.textContent = options.find(o => o.type === "High-Impact")?.text || "";
+      resEl.classList.remove("hidden");
+      console.log("[AI Writer] Results displayed");
       updateStatus("green", "Paraphrase complete");
     } catch (error) {
-      console.error(error);
+      console.error("[AI Writer] Paraphrase error:", error);
       updateStatus("red", "Paraphrase failed");
-      showInfoBanner("Cannot reach server. Make sure it's running (cd backend && python main.py) and access via http://localhost:8765 (not file://)", true);
+      showInfoBanner("Paraphrase failed: " + error.message, true);
     }
   });
 
@@ -495,22 +518,34 @@ function updateStatus(dotColor, text) {
 }
 
 function showInfoBanner(message, isError = true) {
-  const banner = document.getElementById("infoBanner");
-  const msgEl = document.getElementById("infoBannerMessage");
-  msgEl.textContent = message;
-  banner.classList.remove("hidden");
-  if (isError) {
-    banner.style.borderColor = "var(--danger)";
-    banner.querySelector(".info-icon").style.color = "var(--danger)";
-  } else {
-    banner.style.borderColor = "var(--concise)";
-    banner.querySelector(".info-icon").style.color = "var(--concise)";
-    setTimeout(() => hideInfoBanner(), 4000);
+  try {
+    const banner = document.getElementById("infoBanner");
+    const msgEl = document.getElementById("infoBannerMessage");
+    if (!banner || !msgEl) return;
+    msgEl.textContent = message;
+    banner.classList.remove("hidden");
+    if (isError) {
+      banner.style.borderColor = "var(--danger)";
+      const icon = banner.querySelector(".info-icon");
+      if (icon) icon.style.color = "var(--danger)";
+    } else {
+      banner.style.borderColor = "var(--concise)";
+      const icon = banner.querySelector(".info-icon");
+      if (icon) icon.style.color = "var(--concise)";
+      setTimeout(() => hideInfoBanner(), 4000);
+    }
+  } catch (e) {
+    console.error("Banner error:", e);
   }
 }
 
 function hideInfoBanner() {
-  document.getElementById("infoBanner").classList.add("hidden");
+  try {
+    const banner = document.getElementById("infoBanner");
+    if (banner) banner.classList.add("hidden");
+  } catch (e) {
+    console.error("Banner hide error:", e);
+  }
 }
 
 async function handleFileUpload(file) {
