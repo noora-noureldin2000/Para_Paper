@@ -4,19 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Writing Assistant</title>
-  
-  <!-- Custom stylesheet for modern, premium look -->
   <link rel="stylesheet" href="taskpane.css">
-  
-  <!-- Font support -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body class="theme-dark">
   <div class="app-container">
-    
-    <!-- Header Area -->
+
     <header class="header">
       <div class="logo-area">
         <svg class="sparkle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -24,13 +19,18 @@
         </svg>
         <h1>AI Writing Assistant</h1>
       </div>
-      <div class="status-bar" id="statusBar">
-        <span class="status-dot green"></span>
-        <span class="status-text" id="statusText">Ready</span>
+      <div class="header-controls">
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" id="apiKeyInput" placeholder="Gemini API Key">
+          <button class="btn-sync" id="btnSyncApiKey">Link</button>
+        </div>
+        <div class="status-bar" id="statusBar">
+          <span class="status-dot green"></span>
+          <span class="status-text" id="statusText">Ready</span>
+        </div>
       </div>
     </header>
 
-    <!-- Manual Text Input -->
     <section class="input-section">
       <div class="section-header">
         <h2>Your Text</h2>
@@ -59,24 +59,24 @@
           <button class="badge-remove" id="btnRemoveFile" title="Remove file">&times;</button>
         </div>
       </div>
-      <textarea class="input-textarea" id="inputText" placeholder="Paste or type your text here to paraphrase, humanize, or proofread..."></textarea>
+      <textarea class="input-textarea" id="inputText" placeholder="Paste or type your text here to paraphrase, humanize, proofread, or analyze..."></textarea>
     </section>
 
-    <!-- Navigation Tabs -->
     <nav class="tabs-nav">
-      <button class="tab-btn active" data-tab="paraphrase">Paraphrase</button>
-      <button class="tab-btn" data-tab="humanize">Humanize</button>
-      <button class="tab-btn" data-tab="proofread">Proofread</button>
+      <button class="tab-btn active" data-tab="paraphrase">&#x270D; Paraphrase</button>
+      <button class="tab-btn" data-tab="humanize">&#x1F916;&#x200D;&#x1F9D1; Humanize</button>
+      <button class="tab-btn" data-tab="proofread">&#x1F50D; Proofread</button>
+      <button class="tab-btn" data-tab="review">&#x1F4DD; Review</button>
+      <button class="tab-btn" data-tab="write">&#x1F4C4; Write</button>
+      <button class="tab-btn" data-tab="vocab">&#x1F4CA; Vocab</button>
     </nav>
 
-    <!-- Main Content Area -->
     <main class="main-viewport">
-      
+
       <!-- Tab 1: Paraphrase -->
       <div class="tab-content" id="tab-paraphrase">
         <div class="controls-group">
           <p class="tab-description">Rewrite text into Academic, Concise, or High-Impact variations.</p>
-          
           <div class="radio-selector" style="margin-bottom: 12px;">
             <label class="radio-label">
               <input type="radio" name="paraphraseMode" value="general" checked>
@@ -95,7 +95,6 @@
               </div>
             </label>
           </div>
-
           <div class="strength-control">
             <label class="strength-label">
               <span>Transformation Strength</span>
@@ -107,15 +106,12 @@
               <span class="strength-tag">Maximum</span>
             </div>
           </div>
-
           <button class="btn-primary" id="btnRunParaphrase">
             <span>Paraphrase Text</span>
           </button>
         </div>
-        
         <div class="results-container hidden" id="paraphraseResults">
           <div class="result-title">Select Rewrite Style</div>
-          
           <div class="result-card" data-style="Academic">
             <div class="card-header">
               <span class="mode-badge academic">Academic / Formal</span>
@@ -123,7 +119,6 @@
             </div>
             <p class="card-body" id="para-academic-text"></p>
           </div>
-
           <div class="result-card" data-style="Concise">
             <div class="card-header">
               <span class="mode-badge concise">Concise / Direct</span>
@@ -131,7 +126,6 @@
             </div>
             <p class="card-body" id="para-concise-text"></p>
           </div>
-
           <div class="result-card" data-style="High-Impact">
             <div class="card-header">
               <span class="mode-badge impact">High-Impact / Active</span>
@@ -146,7 +140,6 @@
       <div class="tab-content hidden" id="tab-humanize">
         <div class="controls-group">
           <p class="tab-description">Modify text structures to match human writing patterns and bypass detector signatures.</p>
-          
           <div class="radio-selector">
             <label class="radio-label">
               <input type="radio" name="humanizeMode" value="noora" checked>
@@ -165,7 +158,6 @@
               </div>
             </label>
           </div>
-
           <div class="strength-control">
             <label class="strength-label">
               <span>Humanization Strength</span>
@@ -177,12 +169,10 @@
               <span class="strength-tag">Maximum</span>
             </div>
           </div>
-
           <button class="btn-primary" id="btnRunHumanize">
             <span>Humanize Text</span>
           </button>
         </div>
-
         <div class="results-container hidden" id="humanizeResults">
           <div class="result-title">Humanized Result</div>
           <div class="result-card">
@@ -203,22 +193,15 @@
             <span>Audit Text</span>
           </button>
         </div>
-
         <div class="results-container hidden" id="proofreadResults">
           <div class="result-title" id="proofreadTitle">Detected Issues (Phase 1)</div>
-          
-          <!-- Issues List -->
-          <div class="issues-list" id="issuesList">
-            <!-- Issues loaded dynamically -->
-          </div>
-
+          <div class="issues-list" id="issuesList"></div>
           <div class="action-footer" id="proofreadFooter">
             <button class="btn-primary" id="btnApplyFixes">
               <span>Apply Approved Fixes (Phase 2)</span>
             </button>
           </div>
         </div>
-        
         <div class="results-container hidden" id="proofreadFixedContainer">
           <div class="result-title">Proofread Output</div>
           <div class="result-card">
@@ -234,9 +217,73 @@
         </div>
       </div>
 
+      <!-- Tab 4: Manuscript Review -->
+      <div class="tab-content hidden" id="tab-review">
+        <div class="controls-group">
+          <p class="tab-description">Full manuscript review: proofread analysis, academic vocabulary scoring, and readability statistics.</p>
+          <button class="btn-primary" id="btnRunReview">
+            <span>Review Manuscript</span>
+          </button>
+        </div>
+        <div class="results-container hidden" id="reviewResults">
+          <div class="result-title">Manuscript Review Report</div>
+          <div class="stats-grid" id="reviewStats"></div>
+          <div class="result-card">
+            <div class="card-header">
+              <span class="mode-badge proof">Academic Score</span>
+              <span class="strength-value" id="reviewAcademicScore">0.00</span>
+            </div>
+            <p class="card-body" id="reviewScoreDetail"></p>
+          </div>
+          <div class="issues-list" id="reviewIssuesList" style="margin-top: 8px;"></div>
+        </div>
+      </div>
+
+      <!-- Tab 5: Write Paper -->
+      <div class="tab-content hidden" id="tab-write">
+        <div class="controls-group">
+          <p class="tab-description">Generate academic paper content from a topic or outline.</p>
+          <input type="text" class="api-key-input" id="paperTopic" placeholder="Enter your paper topic..." style="width: 100%;">
+          <textarea class="input-textarea" id="paperOutline" placeholder="Optional: list sections (one per line)&#10;e.g.&#10;Introduction&#10;Methods&#10;Results&#10;Discussion" style="min-height: 80px;"></textarea>
+          <button class="btn-primary" id="btnRunWrite">
+            <span>Generate Paper</span>
+          </button>
+        </div>
+        <div class="results-container hidden" id="writeResults">
+          <div class="result-title">Generated Content</div>
+          <div class="result-card">
+            <div class="card-header">
+              <span class="mode-badge academic">Draft</span>
+              <button class="btn-insert" id="btnCopyWriteResult">Copy to Clipboard</button>
+            </div>
+            <p class="card-body" id="writeResultText"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 6: Vocab Analysis -->
+      <div class="tab-content hidden" id="tab-vocab">
+        <div class="controls-group">
+          <p class="tab-description">Analyze text for academic vocabulary density, lexical diversity, and readability metrics.</p>
+          <button class="btn-primary" id="btnRunVocab">
+            <span>Analyze Vocabulary</span>
+          </button>
+        </div>
+        <div class="results-container hidden" id="vocabResults">
+          <div class="result-title">Vocabulary Analysis</div>
+          <div class="stats-grid" id="vocabStats"></div>
+          <div class="result-card">
+            <div class="card-header">
+              <span class="mode-badge academic">Academic Vocabulary Score</span>
+              <span class="strength-value" id="vocabAcademicScore">0.00</span>
+            </div>
+            <p class="card-body" id="vocabScoreDetail"></p>
+          </div>
+        </div>
+      </div>
+
     </main>
-    
-    <!-- Info Banner for Errors -->
+
     <div class="info-banner hidden" id="infoBanner">
       <div class="info-banner-content">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" class="info-icon">

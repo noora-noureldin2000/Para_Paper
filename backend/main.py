@@ -1,23 +1,23 @@
 import os
 import sys
+import re
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from agent_wrapper import AntigravityAgent
+from agent_wrapper import AntigravityAgent, run_local_simulation
+from academic_vocab import get_academic_score
 
 app = FastAPI(
     title="Antigravity AI Writing Backend",
-    description="FastAPI service for real-time paraphrasing, humanizing, and proofreading via google-antigravity",
-    version="1.0.0"
+    description="FastAPI service for real-time paraphrasing, humanizing, proofreading, manuscript review, paper writing, and vocab analysis",
+    version="2.0.0"
 )
 
-# CORS Configuration
-# Allows secure requests from MS Word WebView2 contexts
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all for local development and sideloading
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,17 +29,28 @@ class TextPayload(BaseModel):
 
 class HumanizePayload(BaseModel):
     text: str
-    mode: str = "noora"  # "noora" or "general"
+    mode: str = "noora"
     strength: int = 3
 
 class ProofreadPayload(BaseModel):
     text: str
-    phase: str = "detection"  # "detection" or "fix"
+    phase: str = "detection"
     approved_ids: Optional[List[int]] = None
 
 class MedicalParaphrasePayload(BaseModel):
     text: str
     strength: int = 3
+
+class ApiConfigPayload(BaseModel):
+    provider: str = "gemini"
+    api_key: str = ""
+    model: str = ""
+    base_url: str = ""
+
+class PaperOutlinePayload(BaseModel):
+    topic: str
+    sections: Optional[List[str]] = None
+    style: str = "academic"
 
 paraphrase_agent = AntigravityAgent("academic_rewording.md")
 paraphrase_medical_agent = AntigravityAgent("academic_rewording_medical.md")
@@ -47,18 +58,32 @@ humanizer_noora_agent = AntigravityAgent("humanizer_noora.md")
 humanizer_general_agent = AntigravityAgent("humanizer_general.md")
 proofread_agent = AntigravityAgent("proofreading.md")
 
+
+@app.post("/api/configure")
+async def configure_api(payload: ApiConfigPayload):
+    """Set API provider and key at runtime (Link/Sync button)."""
+    AntigravityAgent.set_api_config(
+        provider=payload.provider,
+        api_key=payload.api_key,
+        model=payload.model,
+        base_url=payload.base_url
+    )
+    print(f"[API] Provider configured: {payload.provider}")
+    return {"status": "ok", "provider": payload.provider}
+
+
 @app.post("/api/paraphrase")
 async def paraphrase_text(payload: TextPayload):
     try:
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
-            
         print(f"[API] Paraphrase request received. Text length: {len(payload.text)}, strength: {payload.strength}")
         result = await paraphrase_agent.run(payload.text, strength=payload.strength)
         return result
     except Exception as e:
         print(f"[API] Paraphrase error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/paraphrase/medical")
 async def paraphrase_medical(payload: MedicalParaphrasePayload):
@@ -72,12 +97,12 @@ async def paraphrase_medical(payload: MedicalParaphrasePayload):
         print(f"[API] Medical Paraphrase error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/humanize")
 async def humanize_text(payload: HumanizePayload):
     try:
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
-            
         print(f"[API] Humanize request received (mode: {payload.mode}, strength: {payload.strength}). Text length: {len(payload.text)}")
         if payload.mode == "noora":
             result = await humanizer_noora_agent.run(payload.text, payload_type="noora", strength=payload.strength)
@@ -88,14 +113,13 @@ async def humanize_text(payload: HumanizePayload):
         print(f"[API] Humanize error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/proofread")
 async def proofread_text(payload: ProofreadPayload):
     try:
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Empty text selection")
-            
         print(f"[API] Proofread request received (phase: {payload.phase}). Text length: {len(payload.text)}")
-        
         if payload.phase == "detection":
             result = await proofread_agent.run(payload.text, payload_type="phase1")
             return result
@@ -105,6 +129,92 @@ async def proofread_text(payload: ProofreadPayload):
     except Exception as e:
         print(f"[API] Proofread error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/manuscript-review")
+async def manuscript_review(payload: TextPayload):
+    """Full manuscript review: proofread + academic scoring + style analysis."""
+    try:
+        if not payload.text.strip():
+            raise HTTPException(status_code=400, detail="Empty text selection")
+        print(f"[API] Manuscript Review request received. Text length: {len(payload.text)}")
+
+        proofread_result = await proofread_agent.run(payload.text, payload_type="phase1")
+        issues = proofread_result.get("issues", []) if proofread_result.get("status") == "success" else []
+
+        score = get_academic_score(payload.text)
+        sentences = [s.strip() for s in re.split(r'[.!?]+', payload.text) if s.strip()]
+        words = payload.text.split()
+        avg_sentence_length = round(len(words) / max(len(sentences), 1), 1)
+
+        return {
+            "status": "success",
+            "issues": issues,
+            "academic_score": round(score, 2),
+            "stats": {
+                "word_count": len(words),
+                "sentence_count": len(sentences),
+                "avg_sentence_length": avg_sentence_length,
+                "char_count": len(payload.text)
+            }
+        }
+    except Exception as e:
+        print(f"[API] Manuscript Review error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/write-paper")
+async def write_paper(payload: PaperOutlinePayload):
+    """Generate academic paper content from topic/outline."""
+    try:
+        if not payload.topic.strip():
+            raise HTTPException(status_code=400, detail="Empty topic")
+        print(f"[API] Write Paper request received. Topic: {payload.topic[:50]}...")
+
+        text = f"Topic: {payload.topic}"
+        if payload.sections:
+            text += "\nSections: " + ", ".join(payload.sections)
+
+        result = await paraphrase_agent.run(text, strength=3)
+        return result
+    except Exception as e:
+        print(f"[API] Write Paper error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/vocab-analysis")
+async def vocab_analysis(payload: TextPayload):
+    """Analyze text for academic vocabulary density and readability."""
+    try:
+        if not payload.text.strip():
+            raise HTTPException(status_code=400, detail="Empty text")
+        print(f"[API] Vocab Analysis request received. Text length: {len(payload.text)}")
+
+        score = get_academic_score(payload.text)
+        words = payload.text.split()
+        word_count = len(words)
+        unique_words = len(set(w.lower().strip(".,!?;:\"'()[]") for w in words))
+        sentences = [s.strip() for s in re.split(r'[.!?]+', payload.text) if s.strip()]
+        sentence_count = len(sentences)
+        avg_word_length = round(sum(len(w.strip(".,!?;:\"'()[]")) for w in words) / max(word_count, 1), 2)
+        long_words = sum(1 for w in words if len(w.strip(".,!?;:\"'()[]")) > 6)
+
+        return {
+            "status": "success",
+            "academic_score": round(score, 2),
+            "stats": {
+                "word_count": word_count,
+                "unique_words": unique_words,
+                "sentence_count": sentence_count,
+                "avg_word_length": avg_word_length,
+                "long_words": long_words,
+                "lexical_diversity": round(unique_words / max(word_count, 1) * 100, 1)
+            }
+        }
+    except Exception as e:
+        print(f"[API] Vocab Analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/health")
 async def health_check():

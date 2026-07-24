@@ -15,18 +15,17 @@
   --color-text-muted: #9f9da6;
   
   /* Accents */
-  --primary: #8b5cf6;         /* Purple 500 */
-  --primary-hover: #a78bfa;   /* Purple 400 */
+  --primary: #8b5cf6;
+  --primary-hover: #a78bfa;
   --primary-glow: rgba(139, 92, 246, 0.35);
   
-  --academic: #3b82f6;        /* Blue 500 */
-  --concise: #10b981;         /* Emerald 500 */
-  --impact: #f59e0b;          /* Amber 500 */
-  --human: #d946ef;           /* Fuchsia 500 */
-  --danger: #ef4444;          /* Red 500 */
-  --warning: #f97316;         /* Orange 500 */
+  --academic: #3b82f6;
+  --concise: #10b981;
+  --impact: #f59e0b;
+  --human: #d946ef;
+  --danger: #ef4444;
+  --warning: #f97316;
   
-  /* Layout Sizing */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -932,4 +931,102 @@ body {
   background: rgba(46, 204, 113, 0.08);
   border-color: rgba(46, 204, 113, 0.25);
   color: rgba(130, 230, 170, 0.9);
+}
+
+/* ---- API Key Sync Row ---- */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.api-key-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.api-key-input {
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 11px;
+  padding: 4px 8px;
+  width: 140px;
+  outline: none;
+  font-family: var(--font-body);
+}
+
+.api-key-input::placeholder {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.btn-sync {
+  background: var(--primary);
+  border: none;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-sync:hover {
+  background: var(--primary-hover);
+  box-shadow: 0 0 8px var(--primary-glow);
+}
+
+.btn-sync.linked {
+  background: var(--concise);
+}
+
+.btn-sync.linked:hover {
+  background: #059669;
+}
+
+/* ---- Stats Grid (Review, Vocab tabs) ---- */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--border-active);
+}
+
+.stat-value {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary-hover);
+  display: block;
+}
+
+.stat-label {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+  display: block;
 }

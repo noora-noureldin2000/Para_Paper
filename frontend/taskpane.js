@@ -1,28 +1,20 @@
-// API Base URL (auto-detect from current page origin)
 const API_BASE_URL = window.location.origin;
 
-// Detect if opened directly from filesystem (not through server)
 if (window.location.protocol === 'file:') {
   document.addEventListener("DOMContentLoaded", () => {
     showInfoBanner("Opened directly from file system. Run the backend server first: cd backend && python main.py then open http://localhost:8765", true);
   });
 }
 
-// State Tracker
 let activeSelection = "";
 
-// Initialize on DOM ready
-document.addEventListener("DOMContentLoaded", () => {
-  initApp();
-});
+document.addEventListener("DOMContentLoaded", initApp);
 
 function initApp() {
   setupTabs();
   setupEventListeners();
-  checkOllamaStatus();
 }
 
-// Read text from textarea
 function getInputText() {
   const textarea = document.getElementById("inputText");
   const text = textarea.value.trim();
@@ -34,14 +26,12 @@ function getInputText() {
   return text;
 }
 
-// Copy text to clipboard
 async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
     updateStatus("green", "Copied to clipboard");
     showInfoBanner("Text copied to clipboard!", false);
   } catch (err) {
-    // Fallback for older browsers or non-secure contexts
     const textarea = document.createElement("textarea");
     textarea.value = text;
     textarea.style.position = "fixed";
@@ -55,7 +45,13 @@ async function copyToClipboard(text) {
   }
 }
 
-// Tab Switching Mechanism
+function buildStatCard(value, label) {
+  const div = document.createElement("div");
+  div.className = "stat-card";
+  div.innerHTML = `<span class="stat-value">${value}</span><span class="stat-label">${label}</span>`;
+  return div;
+}
+
 function setupTabs() {
   const tabButtons = document.querySelectorAll(".tab-btn");
   const tabContents = document.querySelectorAll(".tab-content");
@@ -64,7 +60,6 @@ function setupTabs() {
     btn.addEventListener("click", () => {
       tabButtons.forEach(b => b.classList.remove("active"));
       tabContents.forEach(c => c.classList.add("hidden"));
-      
       btn.classList.add("active");
       const tabId = "tab-" + btn.getAttribute("data-tab");
       document.getElementById(tabId).classList.remove("hidden");
@@ -72,7 +67,6 @@ function setupTabs() {
   });
 }
 
-// Strength description labels
 const STRENGTH_LABELS = {
   1: "1 - Light",
   2: "2 - Light-Moderate",
@@ -81,16 +75,13 @@ const STRENGTH_LABELS = {
   5: "5 - Maximum"
 };
 
-// Event Listeners for Buttons
 function setupEventListeners() {
-  // Clear button
   document.getElementById("btnClearInput").addEventListener("click", () => {
     document.getElementById("inputText").value = "";
     activeSelection = "";
     updateStatus("green", "Cleared");
   });
 
-  // Strength slider for paraphrase
   const strengthSlider = document.getElementById("paraphraseStrength");
   const strengthValue = document.getElementById("paraphraseStrengthValue");
   if (strengthSlider) {
@@ -99,7 +90,6 @@ function setupEventListeners() {
     });
   }
 
-  // Strength slider for humanize
   const humanizeStrengthSlider = document.getElementById("humanizeStrength");
   const humanizeStrengthValue = document.getElementById("humanizeStrengthValue");
   if (humanizeStrengthSlider) {
@@ -108,41 +98,56 @@ function setupEventListeners() {
     });
   }
 
-  // 1. Paraphrase trigger
+  // ---- API Key Sync ----
+  document.getElementById("btnSyncApiKey").addEventListener("click", async () => {
+    const apiKey = document.getElementById("apiKeyInput").value.trim();
+    if (!apiKey) {
+      showInfoBanner("Please enter a Gemini API key first.", true);
+      return;
+    }
+    updateStatus("orange", "Linking API key...");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/configure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "gemini", api_key: apiKey })
+      });
+      if (!response.ok) throw new Error("Sync failed");
+      const btn = document.getElementById("btnSyncApiKey");
+      btn.textContent = "Synced";
+      btn.classList.add("linked");
+      updateStatus("green", "API key linked");
+      showInfoBanner("Gemini API key linked successfully!", false);
+    } catch (error) {
+      updateStatus("red", "Link failed");
+      showInfoBanner("Failed to link API key. Make sure the server is running.", true);
+    }
+  });
+
+  // ---- 1. Paraphrase ----
   document.getElementById("btnRunParaphrase").addEventListener("click", async () => {
     const text = getInputText();
     if (!text) return;
-
     const strength = parseInt(document.getElementById("paraphraseStrength").value, 10);
     const selectedMode = document.querySelector('input[name="paraphraseMode"]:checked').value;
     const apiEndpoint = selectedMode === "medical" ? `${API_BASE_URL}/api/paraphrase/medical` : `${API_BASE_URL}/api/paraphrase`;
-
     updateStatus("orange", "Paraphrasing...");
     hideInfoBanner();
-    
     try {
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, strength })
       });
-      
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || "Server error");
       }
-      
       const data = await response.json();
-      
       const options = data.options;
-      const academic = options.find(o => o.type === "Academic")?.text || "";
-      const concise = options.find(o => o.type === "Concise")?.text || "";
-      const impact = options.find(o => o.type === "High-Impact")?.text || "";
-      
-      document.getElementById("para-academic-text").textContent = academic;
-      document.getElementById("para-concise-text").textContent = concise;
-      document.getElementById("para-impact-text").textContent = impact;
-      
+      document.getElementById("para-academic-text").textContent = options.find(o => o.type === "Academic")?.text || "";
+      document.getElementById("para-concise-text").textContent = options.find(o => o.type === "Concise")?.text || "";
+      document.getElementById("para-impact-text").textContent = options.find(o => o.type === "High-Impact")?.text || "";
       document.getElementById("paraphraseResults").classList.remove("hidden");
       updateStatus("green", "Paraphrase complete");
     } catch (error) {
@@ -152,7 +157,6 @@ function setupEventListeners() {
     }
   });
 
-  // Copy buttons for paraphrase cards
   document.querySelectorAll("#paraphraseResults .btn-insert").forEach(btn => {
     btn.addEventListener("click", () => {
       const resultId = btn.getAttribute("data-result-id");
@@ -161,30 +165,25 @@ function setupEventListeners() {
     });
   });
 
-  // 2. Humanize trigger
+  // ---- 2. Humanize ----
   document.getElementById("btnRunHumanize").addEventListener("click", async () => {
     const text = getInputText();
     if (!text) return;
-
     const selectedMode = document.querySelector('input[name="humanizeMode"]:checked').value;
     const strength = parseInt(document.getElementById("humanizeStrength").value) || 3;
     updateStatus("orange", "Humanizing...");
     hideInfoBanner();
-
     try {
       const response = await fetch(`${API_BASE_URL}/api/humanize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, mode: selectedMode, strength })
       });
-
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || "Server error");
       }
-
       const data = await response.json();
-      
       document.getElementById("humanizedText").textContent = data.text;
       document.getElementById("humanizeResults").classList.remove("hidden");
       updateStatus("green", "Humanize complete");
@@ -195,40 +194,32 @@ function setupEventListeners() {
     }
   });
 
-  // Copy button for Humanize result
   document.getElementById("btnCopyHumanize").addEventListener("click", () => {
     const text = document.getElementById("humanizedText").textContent;
     if (text) copyToClipboard(text);
   });
 
-  // 3. Proofread triggers (Phase 1: Detection)
+  // ---- 3. Proofread ----
   document.getElementById("btnRunProofread").addEventListener("click", async () => {
     const text = getInputText();
     if (!text) return;
-
     updateStatus("orange", "Auditing document...");
     hideInfoBanner();
-    
     document.getElementById("proofreadFixedContainer").classList.add("hidden");
-
     try {
       const response = await fetch(`${API_BASE_URL}/api/proofread`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, phase: "detection" })
       });
-
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || "Server error");
       }
-
       const data = await response.json();
-      
       const issues = data.issues;
       const issuesList = document.getElementById("issuesList");
       issuesList.innerHTML = "";
-      
       if (!issues || issues.length === 0) {
         issuesList.innerHTML = "<p class='placeholder-text'>No proofreading issues detected! Your manuscript meets high peer-review standards.</p>";
         document.getElementById("proofreadFooter").classList.add("hidden");
@@ -243,20 +234,19 @@ function setupEventListeners() {
             <div class="issue-details">
               <div class="issue-meta">
                 <span class="issue-id">[Issue #${issue.id}]</span>
-                <span class="severity-badge ${issue.severity.toLowerCase()}">${issue.severity}</span>
+                <span class="severity-badge ${(issue.severity || 'minor').toLowerCase()}">${issue.severity || 'MINOR'}</span>
                 <span class="category-badge ${catLower}">${category}</span>
-                <span class="issue-location">${issue.location}</span>
+                <span class="issue-location">${issue.location || ''}</span>
               </div>
-              <div class="issue-diagnosis">${issue.diagnosis}</div>
-              <div class="issue-why"><strong>Consequence:</strong> ${issue.why_matters}</div>
-              <div class="issue-fix"><strong>Actionable Fix:</strong> ${issue.actionable_fix}</div>
+              <div class="issue-diagnosis">${issue.diagnosis || ''}</div>
+              <div class="issue-why"><strong>Consequence:</strong> ${issue.why_matters || ''}</div>
+              <div class="issue-fix"><strong>Actionable Fix:</strong> ${issue.actionable_fix || ''}</div>
             </div>
           `;
           issuesList.appendChild(item);
         });
         document.getElementById("proofreadFooter").classList.remove("hidden");
       }
-      
       document.getElementById("proofreadResults").classList.remove("hidden");
       updateStatus("green", "Audit complete");
     } catch (error) {
@@ -266,42 +256,29 @@ function setupEventListeners() {
     }
   });
 
-  // Proofread Apply Approved Fixes (Phase 2: Fix)
   document.getElementById("btnApplyFixes").addEventListener("click", async () => {
     const text = getInputText();
     if (!text) return;
-
     const checkedCheckboxes = document.querySelectorAll(".issue-checkbox:checked");
     const approvedIds = Array.from(checkedCheckboxes).map(cb => parseInt(cb.getAttribute("data-id")));
-
     if (approvedIds.length === 0) {
       showInfoBanner("Please select at least one issue fix to apply.", true);
       return;
     }
-
     updateStatus("orange", "Applying approved fixes...");
     hideInfoBanner();
-
     try {
       const response = await fetch(`${API_BASE_URL}/api/proofread`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          text, 
-          phase: "fix",
-          approved_ids: approvedIds 
-        })
+        body: JSON.stringify({ text, phase: "fix", approved_ids: approvedIds })
       });
-
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || "Server error");
       }
-
       const data = await response.json();
-      
       document.getElementById("proofreadFixedText").textContent = data.text;
-      
       document.getElementById("proofreadResults").classList.add("hidden");
       document.getElementById("proofreadFixedContainer").classList.remove("hidden");
       updateStatus("green", "Fixes generated");
@@ -312,19 +289,162 @@ function setupEventListeners() {
     }
   });
 
-  // Copy proofread output
   document.getElementById("btnCopyProofreadFix").addEventListener("click", () => {
     const text = document.getElementById("proofreadFixedText").textContent;
     if (text) copyToClipboard(text);
   });
 
-  // Back button in Proofread tab
   document.getElementById("btnBackToIssues").addEventListener("click", () => {
     document.getElementById("proofreadFixedContainer").classList.add("hidden");
     document.getElementById("proofreadResults").classList.remove("hidden");
   });
 
-  // ---- File Upload Handling ----
+  // ---- 4. Manuscript Review ----
+  document.getElementById("btnRunReview").addEventListener("click", async () => {
+    const text = getInputText();
+    if (!text) return;
+    updateStatus("orange", "Reviewing manuscript...");
+    hideInfoBanner();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/manuscript-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, strength: 3 })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || "Server error");
+      }
+      const data = await response.json();
+      document.getElementById("reviewAcademicScore").textContent = data.academic_score || "0.00";
+
+      const statsContainer = document.getElementById("reviewStats");
+      statsContainer.innerHTML = "";
+      if (data.stats) {
+        statsContainer.appendChild(buildStatCard(data.stats.word_count, "Words"));
+        statsContainer.appendChild(buildStatCard(data.stats.sentence_count, "Sentences"));
+        statsContainer.appendChild(buildStatCard(data.stats.avg_sentence_length, "Avg Sent. Length"));
+        statsContainer.appendChild(buildStatCard(data.stats.char_count, "Characters"));
+      }
+
+      let scoreDesc = "Low academic vocabulary density.";
+      const score = data.academic_score || 0;
+      if (score >= 0.5) scoreDesc = "Moderate academic vocabulary density.";
+      if (score >= 0.7) scoreDesc = "High academic vocabulary density — strong scholarly writing.";
+      document.getElementById("reviewScoreDetail").textContent = scoreDesc;
+
+      const issuesList = document.getElementById("reviewIssuesList");
+      issuesList.innerHTML = "";
+      if (data.issues && data.issues.length > 0) {
+        issuesList.innerHTML = "<div class='result-title' style='margin-bottom: 6px;'>Detected Issues</div>";
+        data.issues.slice(0, 5).forEach(issue => {
+          const item = document.createElement("div");
+          item.className = "issue-item";
+          item.innerHTML = `<div class="issue-details">
+            <div class="issue-meta">
+              <span class="severity-badge ${(issue.severity || 'minor').toLowerCase()}">${issue.severity || 'MINOR'}</span>
+              <span class="issue-diagnosis">${issue.diagnosis || ''}</span>
+            </div>
+          </div>`;
+          issuesList.appendChild(item);
+        });
+      }
+
+      document.getElementById("reviewResults").classList.remove("hidden");
+      updateStatus("green", "Review complete");
+    } catch (error) {
+      console.error(error);
+      updateStatus("red", "Review failed");
+      showInfoBanner("Review failed. Is the server running?", true);
+    }
+  });
+
+  // ---- 5. Write Paper ----
+  document.getElementById("btnRunWrite").addEventListener("click", async () => {
+    const topic = document.getElementById("paperTopic").value.trim();
+    if (!topic) {
+      showInfoBanner("Please enter a paper topic.", true);
+      return;
+    }
+    const outlineText = document.getElementById("paperOutline").value.trim();
+    const sections = outlineText ? outlineText.split("\n").filter(s => s.trim()).map(s => s.trim()) : null;
+    updateStatus("orange", "Generating paper...");
+    hideInfoBanner();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/write-paper`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, sections, style: "academic" })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || "Server error");
+      }
+      const data = await response.json();
+      const options = data.options;
+      const texts = options ? options.map(o => o.text).filter(t => t) : [];
+      document.getElementById("writeResultText").textContent = texts.join("\n\n---\n\n") || data.text || "No content generated.";
+      document.getElementById("writeResults").classList.remove("hidden");
+      updateStatus("green", "Paper generated");
+    } catch (error) {
+      console.error(error);
+      updateStatus("red", "Generation failed");
+      showInfoBanner("Paper generation failed. Is the server running?", true);
+    }
+  });
+
+  document.getElementById("btnCopyWriteResult").addEventListener("click", () => {
+    const text = document.getElementById("writeResultText").textContent;
+    if (text) copyToClipboard(text);
+  });
+
+  // ---- 6. Vocab Analysis ----
+  document.getElementById("btnRunVocab").addEventListener("click", async () => {
+    const text = getInputText();
+    if (!text) return;
+    updateStatus("orange", "Analyzing vocabulary...");
+    hideInfoBanner();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/vocab-analysis`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, strength: 3 })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || "Server error");
+      }
+      const data = await response.json();
+      document.getElementById("vocabAcademicScore").textContent = data.academic_score || "0.00";
+
+      const statsContainer = document.getElementById("vocabStats");
+      statsContainer.innerHTML = "";
+      if (data.stats) {
+        statsContainer.appendChild(buildStatCard(data.stats.word_count, "Total Words"));
+        statsContainer.appendChild(buildStatCard(data.stats.unique_words, "Unique Words"));
+        statsContainer.appendChild(buildStatCard(data.stats.lexical_diversity + "%", "Lexical Diversity"));
+        statsContainer.appendChild(buildStatCard(data.stats.avg_word_length, "Avg Word Length"));
+        statsContainer.appendChild(buildStatCard(data.stats.long_words, "Long Words (>6)"));
+        statsContainer.appendChild(buildStatCard(data.stats.sentence_count, "Sentences"));
+      }
+
+      let scoreDesc = "Low academic vocabulary density.";
+      const score = data.academic_score || 0;
+      if (score >= 0.5) scoreDesc = "Moderate academic vocabulary density — some scholarly terms detected.";
+      if (score >= 0.7) scoreDesc = "High academic vocabulary density — strong scholarly writing.";
+      if (score >= 0.9) scoreDesc = "Very high academic vocabulary density — excellent scholarly register.";
+      document.getElementById("vocabScoreDetail").textContent = scoreDesc;
+
+      document.getElementById("vocabResults").classList.remove("hidden");
+      updateStatus("green", "Analysis complete");
+    } catch (error) {
+      console.error(error);
+      updateStatus("red", "Analysis failed");
+      showInfoBanner("Analysis failed. Is the server running?", true);
+    }
+  });
+
+  // ---- File Upload ----
   const uploadZone = document.getElementById('uploadZone');
   const fileInput = document.getElementById('fileInput');
   const uploadPlaceholder = document.getElementById('uploadPlaceholder');
@@ -332,13 +452,11 @@ function setupEventListeners() {
   const uploadFilename = document.getElementById('uploadFilename');
   const btnRemoveFile = document.getElementById('btnRemoveFile');
 
-  // Click to open file picker
   uploadZone.addEventListener('click', (e) => {
     if (e.target === btnRemoveFile || e.target.closest('.badge-remove')) return;
     fileInput.click();
   });
 
-  // Drag and drop
   uploadZone.addEventListener('dragover', (e) => {
     e.preventDefault();
     uploadZone.classList.add('drag-over');
@@ -354,14 +472,12 @@ function setupEventListeners() {
     }
   });
 
-  // File input change
   fileInput.addEventListener('change', () => {
     if (fileInput.files.length > 0) {
       handleFileUpload(fileInput.files[0]);
     }
   });
 
-  // Remove file badge
   btnRemoveFile.addEventListener('click', (e) => {
     e.stopPropagation();
     uploadPlaceholder.classList.remove('hidden');
@@ -370,59 +486,44 @@ function setupEventListeners() {
   });
 }
 
-// Status bar controller
 function updateStatus(dotColor, text) {
   const dot = document.querySelector(".status-dot");
   const label = document.getElementById("statusText");
-  
   dot.className = "status-dot";
   dot.classList.add(dotColor);
-  
   label.textContent = text;
 }
 
-// Banner controls
 function showInfoBanner(message, isError = true) {
   const banner = document.getElementById("infoBanner");
   const msgEl = document.getElementById("infoBannerMessage");
-  
   msgEl.textContent = message;
   banner.classList.remove("hidden");
-  
   if (isError) {
     banner.style.borderColor = "var(--danger)";
     banner.querySelector(".info-icon").style.color = "var(--danger)";
   } else {
     banner.style.borderColor = "var(--concise)";
     banner.querySelector(".info-icon").style.color = "var(--concise)";
-    setTimeout(() => {
-      hideInfoBanner();
-    }, 4000);
+    setTimeout(() => hideInfoBanner(), 4000);
   }
 }
 
 function hideInfoBanner() {
-  const banner = document.getElementById("infoBanner");
-  banner.classList.add("hidden");
+  document.getElementById("infoBanner").classList.add("hidden");
 }
 
-// ---- File Upload ----
 async function handleFileUpload(file) {
   const allowedExts = ['.docx', '.pdf', '.txt'];
   const ext = '.' + file.name.split('.').pop().toLowerCase();
-
   if (!allowedExts.includes(ext)) {
     showInfoBanner('Unsupported file type. Please upload .docx, .pdf, or .txt files.', true);
     return;
   }
-
   const uploadPlaceholder = document.getElementById('uploadPlaceholder');
   const uploadBadge = document.getElementById('uploadBadge');
   const uploadFilename = document.getElementById('uploadFilename');
-
   updateStatus('orange', 'Extracting text...');
-
-  // For .txt files, read directly in the browser
   if (ext === '.txt') {
     try {
       const text = await file.text();
@@ -437,25 +538,19 @@ async function handleFileUpload(file) {
     }
     return;
   }
-
-  // For .docx and .pdf, send to backend
   const formData = new FormData();
   formData.append('file', file);
-
   try {
     const response = await fetch(`${API_BASE_URL}/api/upload`, {
       method: 'POST',
       body: formData
     });
-
     if (!response.ok) {
       const errData = await response.json();
       throw new Error(errData.detail || 'Upload failed');
     }
-
     const data = await response.json();
     document.getElementById('inputText').value = data.text;
-
     uploadPlaceholder.classList.add('hidden');
     uploadBadge.classList.remove('hidden');
     uploadFilename.textContent = file.name;
@@ -464,34 +559,5 @@ async function handleFileUpload(file) {
     console.error(error);
     showInfoBanner('Failed to extract text from file. ' + error.message, true);
     updateStatus('red', 'Upload failed');
-  }
-}
-
-// ---- Ollama Status Check ----
-async function checkOllamaStatus() {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/ollama-status`);
-    if (!response.ok) return;
-    const data = await response.json();
-
-    // Remove any existing ollama banner
-    const existing = document.getElementById('ollamaBanner');
-    if (existing) existing.remove();
-
-    const banner = document.createElement('div');
-    banner.id = 'ollamaBanner';
-    banner.className = 'ollama-banner';
-
-    if (data.available) {
-      banner.classList.add('connected');
-      banner.innerHTML = `<span>\u2713 LLama 3.2 connected via Ollama \u2014 AI-powered mode active</span>`;
-    } else {
-      banner.innerHTML = `<span>\u26A0 Ollama not detected \u2014 using rules engine. For AI-powered mode, <a href="https://ollama.com/download" target="_blank">install Ollama</a> and run: <code>ollama pull llama3.2</code></span>`;
-    }
-
-    const header = document.querySelector('.header');
-    header.parentNode.insertBefore(banner, header.nextSibling);
-  } catch (e) {
-    // Server not ready yet, ignore
   }
 }
